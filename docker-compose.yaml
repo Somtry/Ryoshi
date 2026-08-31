@@ -1,0 +1,88 @@
+# Ryoshi 全栈本地/部署编排。
+#
+# 架构说明:
+#   原 morhpic 是单一 Next.js 容器(前后端一体);Ryoshi 拆为两个服务:
+#     server —— Python FastAPI 后端,负责 AI 智能体、搜索、数据库、SSE 流式
+#     web   —— 前端静态资源(Vite 构建产物),经 Nginx 托管并把 /api 反代给 server
+#   数据与中间件(postgres / redis / searxng)与原项目一致。
+
+name: ryoshi-stack
+
+services:
+  # ---- Python 后端 ----
+  server:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    env_file: .env.local
+    environment:
+      # 容器内数据库连接(覆盖 .env.local 里的本地地址)
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-ryoshi}:${POSTGRES_PASSWORD:-ryoshi}@postgres:5432/${POSTGRES_DB:-ryoshi}
+      # 认证默认关闭(本地单人使用);上线前改为 true 并配置 Supabase
+      ENABLE_AUTH: ${ENABLE_AUTH:-false}
+      RYOSHI_CLOUD_DEPLOYMENT: 'false'
+      # 容器内服务地址(用服务名互访)
+      REDIS_URL: redis://redis:6379/0
+      SEARCH_API: ${SEARCH_API:-searxng}
+      SEARXNG_BASE_URL: http://searxng:8080
+    ports:
+      - '8000:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      searxng:
+        condition: service_started
+
+  # ---- 前端静态站点(Vite 构建 + Nginx 托管,/api 反代到 server)----
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - '3000:80' # 用户访问入口仍是 http://localhost:3000
+    depends_on:
+      - server
+
+  # ---- PostgreSQL 17:聊天历史、消息、笔记、文件、反馈 ----
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ryoshi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ryoshi}
+      POSTGRES_DB: ${POSTGRES_DB:-ryoshi}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ryoshi}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Redis:SearXNG 高级搜索缓存 + 限流计数 ----
+  redis:
+    image: redis:alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # ---- SearXNG:自托管元搜索(Docker 部署时默认搜索源,无需 API key)----
+  searxng:
+    image: searxng/searxng
+    ports:
+      - '${SEARXNG_PORT:-8080}:8080'
+    env_file: .env.local
+    volumes:
+      - ./searxng-limiter.toml:/etc/searxng/limiter.toml
+      - ./searxng-settings.yml:/etc/searxng/settings.yml
+      - searxng_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+  searxng_data:
