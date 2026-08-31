@@ -1,0 +1,64 @@
+import { SearchResults } from '@/lib/types'
+
+export interface SearchProvider {
+  search(
+    query: string,
+    maxResults: number,
+    searchDepth: 'basic' | 'advanced',
+    includeDomains: string[],
+    excludeDomains: string[],
+    options?: {
+      type?: 'general' | 'optimized'
+      content_types?: Array<'web' | 'video' | 'image' | 'news'>
+    }
+  ): Promise<SearchResults>
+}
+
+export abstract class BaseSearchProvider implements SearchProvider {
+  abstract search(
+    query: string,
+    maxResults: number,
+    searchDepth: 'basic' | 'advanced',
+    includeDomains: string[],
+    excludeDomains: string[],
+    options?: {
+      type?: 'general' | 'optimized'
+      content_types?: Array<'web' | 'video' | 'image' | 'news'>
+    }
+  ): Promise<SearchResults>
+
+  protected validateApiKey(
+    key: string | undefined,
+    providerName: string
+  ): asserts key is string {
+    if (!key) {
+      throw new Error(
+        `${providerName}_API_KEY is not set in the environment variables`
+      )
+    }
+  }
+
+  protected validateApiUrl(
+    url: string | undefined,
+    providerName: string
+  ): void {
+    if (!url) {
+      throw new Error(
+        `${providerName}_API_URL is not set in the environment variables`
+      )
+    }
+  }
+
+  protected createHttpError(
+    response: Response,
+    providerName: string
+  ): Error & { status: number } {
+    const statusText = response.statusText || 'Unknown Status'
+    return Object.assign(
+      new Error(
+        `${providerName} search failed: HTTP ${response.status}: ${statusText}`
+      ),
+      { status: response.status }
+    )
+  }
+}
