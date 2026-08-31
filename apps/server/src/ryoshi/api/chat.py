@@ -14,8 +14,9 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ryoshi.agents.models import default_model_id
+from ryoshi.agents.models import ModelConfigError, default_model_id
 from ryoshi.agents.researcher import build_initial_messages, create_quick_researcher
+from ryoshi.chat.frames import Error
 from ryoshi.chat.sse import SSE_HEADERS, encode_done, encode_frame
 from ryoshi.chat.stream import agent_stream_to_frames
 
@@ -60,7 +61,19 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         return StreamingResponse(empty(), headers=SSE_HEADERS)
 
     # 阶段 3 固定用 Quick 模式与默认模型;模型选择/searchMode 在阶段 4 接入 cookie 逻辑
-    model_id = default_model_id()
+    try:
+        model_id = default_model_id()
+    except ModelConfigError as exc:
+        # 未配置任何模型密钥:返回规范 error 帧而非裸 500,前端能统一展示。
+        # 注意:except 的 exc 在块结束后会被解释器删除,闭包须先存到局部变量。
+        error_message = str(exc)
+
+        async def no_model():
+            yield encode_frame(Error(errorText=error_message))
+            yield encode_done()
+
+        return StreamingResponse(no_model(), headers=SSE_HEADERS)
+
     agent = create_quick_researcher(model_id)
     messages = build_initial_messages(user_text)
 

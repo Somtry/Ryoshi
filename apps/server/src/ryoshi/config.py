@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_generative_ai_api_key: str = ""
+    #: DeepSeek(OpenAI 兼容 API,base_url 固定,只需 key)
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     # ---- 搜索提供商密钥 ----
     tavily_api_key: str = ""
