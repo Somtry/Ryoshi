@@ -79,7 +79,14 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
         return StreamingResponse(no_model(), headers=SSE_HEADERS)
 
-    agent = create_quick_researcher(model_id)
+    # 按 searchMode 选择智能体:quick(默认)或 adaptive
+    if req.searchMode == "adaptive":
+        from ryoshi.agents.researcher import create_adaptive_researcher
+        agent = create_adaptive_researcher(model_id)
+        max_steps = 50  # 对应原项目 adaptive maxSteps=50
+    else:
+        agent = create_quick_researcher(model_id)
+        max_steps = 20  # 对应原项目 quick maxSteps=20
     messages = build_initial_messages(user_text)
 
     # ---- 持久化:先落用户消息,流结束后再落 assistant 回答 ----
@@ -125,6 +132,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
             # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
             message_metadata={"searchMode": req.searchMode, "modelId": model_id},
             on_assistant_message=persist_assistant_message,
+            max_steps=max_steps,
         )
         async for frame in frames:
             yield encode_frame(frame)

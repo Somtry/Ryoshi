@@ -157,6 +157,8 @@ export function Chat({
             chatId: chatId,
             messageId,
             analyticsId: getDistinctId(),
+            // 后端据此选择 Quick/Adaptive 智能体(对应原项目的 cookie 记忆)
+            searchMode: getCookie('searchMode') === 'adaptive' ? 'adaptive' : 'quick',
             ...(isGuest ? { messages } : {}),
             message:
               trigger === 'regenerate-message' &&

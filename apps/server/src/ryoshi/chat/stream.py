@@ -43,6 +43,7 @@ async def agent_stream_to_frames(
     message_id: str | None = None,
     message_metadata: dict | None = None,
     on_assistant_message: Any = None,
+    max_steps: int = 20,
 ) -> AsyncIterator[_Frame]:
     """驱动智能体并把其事件翻译为 UIMessageStream 帧。
 
@@ -94,7 +95,7 @@ async def agent_stream_to_frames(
 
     try:
         stream = agent.astream_events(
-            {"messages": messages}, version="v2", config={"recursion_limit": 20}
+            {"messages": messages}, version="v2", config={"recursion_limit": max_steps}
         )
 
         # 我们需要同时看到"模型文本流"与"工具事件",因此不能只用 raw_text_deltas,
