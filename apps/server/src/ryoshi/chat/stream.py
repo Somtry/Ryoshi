@@ -48,7 +48,13 @@ async def agent_stream_to_frames(
     参数:
         agent: create_react_agent 编译出的 LangGraph 智能体
         messages: 初始消息列表(LangChain 消息)
-        message_id / message_metadata: 写入首帧 start,供前端关联追踪
+        message_id: 本次 assistant 回答的消息 id,写入首帧 start。
+            关键约束:必须是 assistant 消息自己的新 id,绝不能复用
+            用户消息的 id——前端 useChat 会把 start.messageId 赋给正在
+            流式的 assistant 消息;若与 user 消息同 id,前端会判定为
+            "替换最后一条"而把用户消息覆盖掉,导致用户消息从界面消失。
+            缺省时由后端生成一个。
+        message_metadata: 写入首帧 start,供前端关联追踪
     产出:
         按序的帧(start → 若干 step → finish)。
     """

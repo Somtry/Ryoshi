@@ -81,7 +81,8 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         frames = agent_stream_to_frames(
             agent,
             messages,
-            message_id=req.message.id if req.message else None,
+            # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
+            # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
             message_metadata={"searchMode": req.searchMode, "modelId": model_id},
         )
         async for frame in frames:
