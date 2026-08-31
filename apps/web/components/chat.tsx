@@ -7,6 +7,7 @@ import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { toast } from 'sonner'
 
+import { CHAT_API } from '@/lib/api'
 import { summarizeGenui } from '@/lib/analytics/genui-summary'
 import { captureClient, getDistinctId } from '@/lib/analytics/posthog-client'
 import { ChatProvider } from '@/lib/contexts/chat-context'
@@ -141,7 +142,7 @@ export function Chat({
   } = useChat({
     id: chatId, // use the client-generated or provided chatId
     transport: new DefaultChatTransport({
-      api: '/api/chat',
+      api: CHAT_API,
       prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
         // Simplify by passing AI SDK's default trigger values directly
         const lastMessage = messages[messages.length - 1]

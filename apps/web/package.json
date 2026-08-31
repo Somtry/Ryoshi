@@ -53,7 +53,8 @@
     "zod": "^4.3.6",
     "@json-render/core": "^0.16.0",
     "@json-render/react": "^0.16.0",
-    "@supabase/supabase-js": "^2.49.4"
+    "@supabase/supabase-js": "^2.49.4",
+    "@radix-ui/react-visually-hidden": "^1.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.11",
