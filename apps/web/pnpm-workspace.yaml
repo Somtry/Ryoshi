@@ -1,0 +1,8 @@
+allowBuilds:
+  core-js: set this to true or false
+  esbuild: set this to true or false
+# pnpm 11:声明允许执行安装期构建脚本的依赖白名单
+# esbuild 需编译二进制(Vite 依赖),core-js 需 postinstall
+onlyBuiltDependencies:
+  - esbuild
+  - core-js
