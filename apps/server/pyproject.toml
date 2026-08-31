@@ -1,0 +1,56 @@
+[project]
+name = "ryoshi-server"
+version = "0.1.0"
+description = "Ryoshi —— AI 驱动的生成式 UI 搜索引擎(Python 后端)"
+requires-python = ">=3.12"
+dependencies = [
+    # Web 框架:FastAPI + ASGI 服务器
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    # 数据校验
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    # 数据库:SQLAlchemy 2.0 异步 + PostgreSQL 驱动 + 迁移工具
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    # 缓存与限流
+    "redis>=5.2",
+    # HTTP 客户端(抓取网页、调用 Brave 等)
+    "httpx>=0.28",
+    # 智能体编排(对应原项目的 ToolLoopAgent)
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    # 认证:Supabase JWT 校验
+    "python-jose[cryptography]>=3.3",
+    # 可观测性:链路追踪 + 行为分析
+    "langfuse>=2.60",
+    "posthog>=3.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ryoshi"]
+
+# Ruff:统一的代码检查 + 格式化工具(对应前端的 ESLint + Prettier)
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
