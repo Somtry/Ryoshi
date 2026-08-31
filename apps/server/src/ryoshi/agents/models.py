@@ -27,8 +27,10 @@ def is_provider_enabled(provider_id: str) -> bool:
         "anthropic": bool(s.anthropic_api_key),
         "google": bool(s.google_generative_ai_api_key),
         "deepseek": bool(s.deepseek_api_key),
-        # 通用 openai-compatible 与 ollama 需要额外基础地址,阶段 4 再接入
-        "openai-compatible": False,
+        # 通用 openai-compatible:key 与 base_url 都配上才可用
+        "openai-compatible": bool(
+            s.openai_compatible_api_key and s.openai_compatible_api_base_url
+        ),
         "ollama": False,
     }.get(provider_id, False)
 
@@ -70,6 +72,15 @@ def get_model(full_model: str) -> BaseChatModel:
         return ChatOpenAI(
             model=model_id, api_key=s.deepseek_api_key, base_url=s.deepseek_base_url
         )
+    if provider_id == "openai-compatible":
+        # 通用 OpenAI 兼容端点(DeepSeek 官方接入方式;也可指向任意兼容服务)
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model_id,
+            api_key=s.openai_compatible_api_key,
+            base_url=s.openai_compatible_api_base_url,
+        )
 
     raise ModelConfigError(f"暂不支持的 provider: {provider_id}")
 
@@ -77,10 +88,19 @@ def get_model(full_model: str) -> BaseChatModel:
 def default_model_id() -> str:
     """返回默认可用模型(Quick 模式起步用)。
 
-    按已配置的密钥挑一个。当前默认优先 DeepSeek(deepseek-chat),
-    其次才是各家官方 provider。
+    优先级:
+      1. 配置了 OPENAI_COMPATIBLE_* 时,取 OPENAI_COMPATIBLE_MODELS 清单第一个
+      2. DeepSeek 便捷写法(DEEPSEEK_API_KEY)
+      3. 各家官方 provider
     """
     s = get_settings()
+    if s.openai_compatible_api_key and s.openai_compatible_api_base_url:
+        first = next(
+            (m.strip() for m in s.openai_compatible_models.split(",") if m.strip()),
+            None,
+        )
+        if first:
+            return f"openai-compatible:{first}"
     if s.deepseek_api_key:
         return "deepseek:deepseek-chat"
     if s.openai_api_key:

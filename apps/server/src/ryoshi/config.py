@@ -49,9 +49,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_generative_ai_api_key: str = ""
-    #: DeepSeek(OpenAI 兼容 API,base_url 固定,只需 key)
+    #: DeepSeek(走专用 provider 的便捷写法,只需 key)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
+    #: 通用 OpenAI 兼容端点(DeepSeek 官方推荐写法;也可指向任何兼容服务)
+    #: openai_compatible_models 为逗号分隔的模型清单,第一个即默认模型
+    openai_compatible_api_key: str = ""
+    openai_compatible_api_base_url: str = ""
+    openai_compatible_models: str = ""
 
     # ---- 搜索提供商密钥 ----
     tavily_api_key: str = ""
