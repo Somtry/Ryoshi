@@ -22,7 +22,7 @@ from langgraph.prebuilt import create_react_agent
 
 from ryoshi.agents.models import get_model
 from ryoshi.tools.fetch import fetch_url
-from ryoshi.tools.search import get_default_provider
+from ryoshi.tools.search import search_with_fallback
 
 # Quick 模式工具循环步数上限(与原项目 maxSteps=20 一致)
 QUICK_MAX_STEPS = 20
@@ -94,8 +94,9 @@ async def search(query: str, max_results: int = 10) -> dict:
     返回:
         含 results(标题/链接/摘要)、images、answer 的结构化结果。
     """
-    provider = get_default_provider()
-    results = await provider.search(query=query, max_results=max_results, search_depth="basic")
+    results = await search_with_fallback(
+        query=query, max_results=max_results, search_depth="basic"
+    )
     return results.to_dict()
 
 

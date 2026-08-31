@@ -166,6 +166,213 @@ class TavilySearchProvider(BaseSearchProvider):
         )
 
 
+class SearXNGSearchProvider(BaseSearchProvider):
+    """SearXNG 自托管搜索(本地 Docker 或内网实例)。请求/响应对应原项目 searxng.ts。"""
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        search_depth: str = "basic",
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
+    ) -> SearchResults:
+        settings = get_settings()
+        if not settings.searxng_base_url:
+            raise SearchProviderError("未配置 SEARXNG_BASE_URL")
+
+        params: dict[str, str] = {
+            "q": query,
+            "format": "json",
+            "categories": "general,images",
+        }
+        if search_depth == "advanced":
+            params.update({"time_range": "", "safesearch": "0", "engines": "google,bing,duckduckgo,wikipedia"})
+        else:
+            params.update({"time_range": "year", "safesearch": "1", "engines": "google,bing"})
+        if include_domains:
+            params["site"] = ",".join(include_domains)
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{settings.searxng_base_url}/search", params=params, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            raise SearchProviderError(f"SearXNG API 错误: {resp.status_code}", status=resp.status_code)
+
+        data = resp.json()
+        all_results = data.get("results", [])
+        general = [r for r in all_results if not r.get("img_src")][:max_results]
+        images = [
+            {"url": r.get("img_src", ""), "description": r.get("content", "")}
+            for r in all_results
+            if r.get("img_src")
+        ][:max_results]
+
+        return SearchResults(
+            results=[
+                SearchResult(title=r.get("title", ""), url=r.get("url", ""), content=r.get("content", ""), score=0.0)
+                for r in general
+            ],
+            images=images,
+            query=data.get("query", query),
+        )
+
+
+class BraveSearchProvider(BaseSearchProvider):
+    """Brave 搜索。对应原项目 brave.ts。"""
+
+    _ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        search_depth: str = "basic",
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
+    ) -> SearchResults:
+        settings = get_settings()
+        if not settings.brave_api_key:
+            raise SearchProviderError("未配置 BRAVE_API_KEY")
+
+        headers = {"Accept": "application/json", "X-Subscription-Token": settings.brave_api_key}
+        params: dict[str, str] = {"q": query, "count": str(max_results), "safesearch": "moderate"}
+        if include_domains:
+            params["site"] = ",".join(include_domains)
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(self._ENDPOINT, params=params, headers=headers)
+        if resp.status_code != 200:
+            raise SearchProviderError(f"Brave API 错误: {resp.status_code}", status=resp.status_code)
+
+        data = resp.json()
+        web_results = data.get("web", {}).get("results", [])
+        return SearchResults(
+            results=[
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=r.get("url", ""),
+                    content=r.get("description", ""),
+                    score=r.get("score", 0.0),
+                )
+                for r in web_results[:max_results]
+            ],
+            images=[],
+            query=query,
+        )
+
+
+class ExaSearchProvider(BaseSearchProvider):
+    """Exa 神经搜索。对应原项目 exa.ts。"""
+
+    _ENDPOINT = "https://api.exa.ai/search"
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        search_depth: str = "basic",
+        include_domains: list[str] | None = None,
+        exclude_domains: list[str] | None = None,
+    ) -> SearchResults:
+        settings = get_settings()
+        if not settings.exa_api_key:
+            raise SearchProviderError("未配置 EXA_API_KEY")
+
+        payload: dict[str, Any] = {
+            "query": query,
+            "numResults": max_results,
+            "contents": {"text": {"maxCharacters": 1000}},
+        }
+        if include_domains:
+            payload["includeDomains"] = include_domains
+        if exclude_domains:
+            payload["excludeDomains"] = exclude_domains
+
+        headers = {"x-api-key": settings.exa_api_key, "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(self._ENDPOINT, json=payload, headers=headers)
+        if resp.status_code != 200:
+            raise SearchProviderError(f"Exa API 错误: {resp.status_code}", status=resp.status_code)
+
+        data = resp.json()
+        return SearchResults(
+            results=[
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=r.get("url", ""),
+                    content=(r.get("text") or "")[:1000],
+                    score=r.get("score", 0.0),
+                    published_date=r.get("publishedDate"),
+                )
+                for r in data.get("results", [])
+            ],
+            images=[],
+            query=query,
+        )
+
+
+# ---- 降级链 ----
+# 与原项目 search.ts 的降级策略对应:
+#   默认源由 SEARCH_API 指定(默认 tavily);失败(可恢复错误)时按降级链依次尝试。
+#   可恢复错误 = 网络超时/5xx/限流;4xx 参数错误不降级(重试无意义)。
+_PROVIDERS: dict[str, type[BaseSearchProvider]] = {
+    "tavily": TavilySearchProvider,
+    "searxng": SearXNGSearchProvider,
+    "brave": BraveSearchProvider,
+    "exa": ExaSearchProvider,
+}
+
+# 降级顺序:优先同类型的高质量源,最后兜底本地 SearXNG
+_FALLBACK_ORDER = ["tavily", "brave", "exa", "searxng"]
+
+
+def _is_recoverable(exc: Exception) -> bool:
+    """判断是否可恢复错误(网络/5xx/限流),可降级;4xx 参数错误不降级。"""
+    if isinstance(exc, SearchProviderError):
+        return exc.status is None or exc.status >= 500 or exc.status == 429
+    return True  # 网络异常等
+
+
+async def search_with_fallback(
+    query: str,
+    max_results: int = 10,
+    search_depth: str = "basic",
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> SearchResults:
+    """带降级链的搜索。默认源失败(可恢复)时按 _FALLBACK_ORDER 依次尝试。"""
+    settings = get_settings()
+    preferred = getattr(settings, "search_api", None) or "tavily"
+
+    # 构造尝试顺序:默认源在前,其余按降级链
+    order = [preferred] + [p for p in _FALLBACK_ORDER if p != preferred]
+    last_error: Exception | None = None
+
+    for name in order:
+        provider_cls = _PROVIDERS.get(name)
+        if provider_cls is None:
+            continue
+        provider = provider_cls()
+        try:
+            return await provider.search(
+                query=query,
+                max_results=max_results,
+                search_depth=search_depth,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
+            )
+        except Exception as exc:
+            last_error = exc
+            if not _is_recoverable(exc):
+                raise  # 4xx 等不可恢复,直接抛
+            print(f"[ryoshi] 搜索源 {name} 失败({exc}),尝试降级")
+            continue
+
+    raise SearchProviderError(f"所有搜索源均失败: {last_error}")
+
+
 def get_default_provider() -> BaseSearchProvider:
-    """取默认搜索源。阶段 3 只有 Tavily;阶段 4 按 SEARCH_API 配置扩展到多源。"""
-    return TavilySearchProvider()
+    """取默认搜索源(由 SEARCH_API 配置,默认 tavily)。"""
+    settings = get_settings()
+    name = getattr(settings, "search_api", None) or "tavily"
+    return _PROVIDERS.get(name, TavilySearchProvider)()

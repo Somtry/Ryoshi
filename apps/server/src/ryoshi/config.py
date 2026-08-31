@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     exa_api_key: str = ""
     #: 自托管 SearXNG 的地址(Docker 部署时自动带上)
     searxng_base_url: str = ""
+    #: 默认搜索源(tavily / searxng / brave / exa)。失败时按降级链依次尝试。
+    search_api: str = "tavily"
 
     # ---- 可观测性(可选,留空即关闭)----
     langfuse_public_key: str = ""
