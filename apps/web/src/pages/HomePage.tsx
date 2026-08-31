@@ -2,19 +2,31 @@
 ///
 /// 设计意图:
 ///   原页面是 React Server Component,服务端注入 userId、模型选择数据等;
-///   迁到 SPA 后改为客户端渲染。阶段 3 先用匿名(访客)模式与缺省配置跑通
-///   核心聊天;userId / 模型选择器数据 / 图书馆可用性 在阶段 4 接入认证与
-///   模型选择 API 后填充。
+///   迁到 SPA 后改为客户端挂载时调 /api/models 拉模型选择器数据。
+///   匿名模式下 isGuest=true,模型选择器仍可用(选择结果存 cookie)。
+
+import { useEffect, useState } from 'react'
+
+import { apiFetch } from '@/lib/api-client'
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 
 import { Chat } from '@/components/chat'
 
 export default function HomePage() {
+  const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+
+  useEffect(() => {
+    apiFetch('/api/models')
+      .then(setModelSelectorData)
+      .catch(() => setModelSelectorData(undefined))
+  }, [])
+
   return (
     <Chat
-      // 阶段 3:匿名访客模式(未接认证)
       isGuest
       isCloudDeployment={false}
       libraryAvailable={false}
+      modelSelectorData={modelSelectorData}
     />
   )
 }
