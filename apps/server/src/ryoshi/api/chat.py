@@ -45,6 +45,8 @@ class ChatRequest(BaseModel):
     searchMode: str = "quick"
     # 前端在首轮提交时置 true,后端据此建会话(从首条消息生成标题)
     isNewChat: bool = False
+    # 匿名模式下前端把全部历史消息发过来(对应原项目 prepareMessages 的 messages)
+    messages: list[IncomingMessage] = []
 
 
 def _extract_user_text(req: ChatRequest) -> str:
@@ -87,7 +89,38 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     else:
         agent = create_quick_researcher(model_id)
         max_steps = 20  # 对应原项目 quick maxSteps=20
-    messages = build_initial_messages(user_text)
+
+    # ---- 构造模型输入:历史消息 + 当前消息,再按上下文窗口截断 ----
+    # 对应原项目 prepareMessages:非新聊天时从 DB 加载历史并追加当前消息。
+    from ryoshi.chat.context_window import get_max_allowed_tokens, truncate_messages
+    from ryoshi.db.persistence import load_chat
+
+    async def build_model_messages() -> list:
+        """组装传给智能体的 LangChain 消息列表(含历史,已截断)。"""
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        history: list = []
+        if not req.isNewChat and req.chatId:
+            async with get_session_factory()() as session:
+                chat = await load_chat(session, req.chatId)
+            if chat:
+                for m in chat["messages"]:
+                    text = "".join(p.get("text", "") for p in m.get("parts", []) if p.get("type") == "text")
+                    if not text:
+                        continue
+                    if m["role"] == "user":
+                        history.append(HumanMessage(content=text))
+                    elif m["role"] == "assistant":
+                        history.append(AIMessage(content=text))
+
+        # 当前用户消息放最后
+        history.append(HumanMessage(content=user_text))
+
+        # 上下文窗口截断(对应原项目 truncateMessages)
+        model_name = model_id.split(":", 1)[1] if ":" in model_id else model_id
+        return truncate_messages(history, get_max_allowed_tokens(model_name), model_name)
+
+    messages = await build_model_messages()
 
     # ---- 持久化:先落用户消息,流结束后再落 assistant 回答 ----
     # 对应原项目 persistStreamResults:新聊天先建会话+首消息,

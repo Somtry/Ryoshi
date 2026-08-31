@@ -69,6 +69,16 @@ class Settings(BaseSettings):
     #: 默认搜索源(tavily / searxng / brave / exa)。失败时按降级链依次尝试。
     search_api: str = "tavily"
 
+    # ---- 文件上传(S3 兼容对象存储:Cloudflare R2 / AWS S3 / MinIO)----
+    # 全部为空时上传功能关闭,前端隐藏入口
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "user-uploads"
+    r2_public_url: str = ""
+    #: 自定义 S3 端点(MinIO/自建),优先于 R2_ACCOUNT_ID
+    s3_endpoint: str = ""
+
     # ---- 可观测性(可选,留空即关闭)----
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
