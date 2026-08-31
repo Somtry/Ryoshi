@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ryoshi.api.chat import router as chat_router
 from ryoshi.config import get_settings
 
 
@@ -52,7 +53,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # 业务路由在后续阶段逐个填充,先挂健康检查
+    # 业务路由
+    app.include_router(chat_router)
+
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
         """健康检查。返回固定串即可,供 docker-compose 的 healthcheck 与冒烟测试用。"""

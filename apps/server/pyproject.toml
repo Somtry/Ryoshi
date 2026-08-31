@@ -26,10 +26,15 @@ dependencies = [
     # 可观测性:链路追踪 + 行为分析
     "langfuse>=2.60",
     "posthog>=3.7",
+    "langchain-openai>=1.6.0",
+    "langchain-anthropic>=1.7.0",
+    "langchain-google-genai>=4.3.7",
+    "langchain-ollama>=1.1.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
     "ruff>=0.9",
