@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # ---- 认证 ----
     #: 是否启用认证。本地单人使用可关掉,所有请求共享一个匿名用户
     enable_auth: bool = False
+    #: 匿名模式下的默认用户 id(ENABLE_AUTH=false 时所有请求共用)
+    anonymous_user_id: str = "anonymous-user"
     #: Supabase 项目地址与密钥(JWT 校验用)
     supabase_url: str = ""
     supabase_jwt_secret: str = ""

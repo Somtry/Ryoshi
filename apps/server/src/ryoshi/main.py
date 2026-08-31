@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ryoshi.api.chat import router as chat_router
+from ryoshi.api.chats import router as chats_router
 from ryoshi.config import get_settings
 
 
@@ -30,8 +31,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     # 启动日志:让开发者第一眼确认关键开关状态(不打印密钥本身)
     print(f"[ryoshi] 环境={settings.environment} 认证={'开' if settings.enable_auth else '关(匿名)'}")
+    # 初始化数据库连接池(Neon / 本地 Postgres)
+    from ryoshi.db.engine import dispose_db, init_db
+
+    init_db()
     yield
-    # 关闭阶段:此处未来释放数据库引擎、Redis 连接等资源
+    # 关闭阶段:释放数据库连接池
+    await dispose_db()
 
 
 def create_app() -> FastAPI:
@@ -55,6 +61,7 @@ def create_app() -> FastAPI:
 
     # 业务路由
     app.include_router(chat_router)
+    app.include_router(chats_router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

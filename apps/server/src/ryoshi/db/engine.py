@@ -31,15 +31,41 @@ def init_db() -> AsyncEngine:
 
     pool_pre_ping=True 让连接在取用前先探活,避免拿到数据库侧已断开的死连接;
     这对长时间运行的服务很重要(数据库可能因超时主动断开空闲连接)。
+
+    连接串规范:用户常直接粘贴 Neon/Supabase 给的 "postgresql://..." 形式,
+    而 SQLAlchemy 异步需要显式指定 asyncpg 驱动("postgresql+asyncpg://...")。
+    这里统一规范化,免去手动改连接串。
+
+    SSL 参数:Neon 等给的连接串常带 libpq 风格的 ?sslmode=require&channel_binding=require,
+    但 asyncpg 不认这两个 query 参数(会报 "unexpected keyword argument")。
+    这里把 sslmode=require 翻译成 asyncpg 的 ssl=True,并剥掉 channel_binding。
     """
     global _engine, _session_factory
     settings = get_settings()
+    url = settings.database_url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    # 把 libpq 风格 query 参数翻译成 asyncpg 的 connect_args
+    connect_args: dict = {}
+    if "?" in url:
+        base, query = url.split("?", 1)
+        params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+        sslmode = params.pop("sslmode", None)
+        params.pop("channel_binding", None)  # asyncpg 不支持,丢弃
+        if sslmode in ("require", "verify-ca", "verify-full"):
+            connect_args["ssl"] = True
+        elif sslmode == "disable":
+            connect_args["ssl"] = False
+        url = base + ("?" + "&".join(f"{k}={v}" for k, v in params.items()) if params else "")
+
     _engine = create_async_engine(
-        settings.database_url,
+        url,
         echo=False,  # 调试时可改 True 打印 SQL
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
+        connect_args=connect_args,
     )
     _session_factory = async_sessionmaker(
         bind=_engine,

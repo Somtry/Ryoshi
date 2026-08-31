@@ -19,6 +19,9 @@ from ryoshi.agents.researcher import build_initial_messages, create_quick_resear
 from ryoshi.chat.frames import Error
 from ryoshi.chat.sse import SSE_HEADERS, encode_done, encode_frame
 from ryoshi.chat.stream import agent_stream_to_frames
+from ryoshi.config import get_settings
+from ryoshi.db.engine import get_session_factory
+from ryoshi.db.persistence import create_chat_with_first_message, upsert_message
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -40,6 +43,8 @@ class ChatRequest(BaseModel):
     message: IncomingMessage | None = None
     chatId: str | None = None
     searchMode: str = "quick"
+    # 前端在首轮提交时置 true,后端据此建会话(从首条消息生成标题)
+    isNewChat: bool = False
 
 
 def _extract_user_text(req: ChatRequest) -> str:
@@ -77,13 +82,49 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     agent = create_quick_researcher(model_id)
     messages = build_initial_messages(user_text)
 
+    # ---- 持久化:先落用户消息,流结束后再落 assistant 回答 ----
+    # 对应原项目 persistStreamResults:新聊天先建会话+首消息,
+    # 已有聊天只追加用户消息;assistant 回答在流完整结束后落库。
+    user_id = get_settings().anonymous_user_id
+    chat_id = req.chatId
+
+    async def persist_user_message() -> None:
+        """把用户消息落库。新聊天顺带建会话(从首条消息生成标题)。"""
+        if not chat_id or not req.message:
+            return
+        user_msg = {
+            "id": req.message.id,
+            "role": "user",
+            "parts": [p.model_dump() for p in req.message.parts],
+            "metadata": None,
+        }
+        async with get_session_factory()() as session:
+            if req.isNewChat:
+                await create_chat_with_first_message(session, chat_id, user_msg, user_id)
+            else:
+                await upsert_message(session, chat_id, user_msg)
+
+    async def persist_assistant_message(assistant_msg: dict) -> None:
+        """流结束后把 assistant 回答落库(含工具调用与文本部件)。"""
+        if not chat_id:
+            return
+        async with get_session_factory()() as session:
+            await upsert_message(session, chat_id, assistant_msg)
+
     async def event_stream():
+        # 先落用户消息(失败不阻塞流式,只记日志——历史缺失可容忍,回答必须送达)
+        try:
+            await persist_user_message()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ryoshi] 用户消息持久化失败: {exc}")
+
         frames = agent_stream_to_frames(
             agent,
             messages,
             # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
             # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
             message_metadata={"searchMode": req.searchMode, "modelId": model_id},
+            on_assistant_message=persist_assistant_message,
         )
         async for frame in frames:
             yield encode_frame(frame)

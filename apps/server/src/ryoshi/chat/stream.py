@@ -42,6 +42,7 @@ async def agent_stream_to_frames(
     messages: list,
     message_id: str | None = None,
     message_metadata: dict | None = None,
+    on_assistant_message: Any = None,
 ) -> AsyncIterator[_Frame]:
     """驱动智能体并把其事件翻译为 UIMessageStream 帧。
 
@@ -55,14 +56,26 @@ async def agent_stream_to_frames(
             "替换最后一条"而把用户消息覆盖掉,导致用户消息从界面消失。
             缺省时由后端生成一个。
         message_metadata: 写入首帧 start,供前端关联追踪
+        on_assistant_message: 可选回调。流正常结束时,以收集到的完整
+            assistant 消息(id/role/parts)调用之,供路由层持久化。
     产出:
         按序的帧(start → 若干 step → finish)。
     """
-    yield Start(messageId=message_id or _new_id(), messageMetadata=message_metadata)
+    assistant_message_id = message_id or _new_id()
+    yield Start(messageId=assistant_message_id, messageMetadata=message_metadata)
 
     # 文本块 id:同一轮连续文本共用一个 id,模型开始新一轮文本时换新的
     current_text_id: str | None = None
     text_open = False
+
+    # 收集 assistant 消息的部件(供持久化)。顺序即 parts.order:
+    # 文本段与工具部件按事件发生的真实先后追加,保持与渲染顺序一致。
+    collected_parts: list[dict] = []
+    # 工具调用按 toolCallId 索引到 collected_parts 里的位置,
+    # 便于 on_tool_end 时把 output 回填进同一个部件。
+    tool_part_index: dict[str, int] = {}
+    # 当前文本段的累积内容(text-delta 是增量,落库要完整文本)
+    text_buffer: list[str] = []
 
     async def raw_text_deltas(stream) -> AsyncIterator[str]:
         nonlocal current_text_id, text_open
@@ -100,8 +113,10 @@ async def agent_stream_to_frames(
                     continue
                 if not text_open:
                     current_text_id = _new_id()
+                    text_buffer = []  # 新一轮文本开始,清空缓冲
                     yield TextStart(id=current_text_id)
                     text_open = True
+                text_buffer.append(text)
                 # 文本增量经 smoothStream 平滑后再发
                 async def _single():
                     yield text
@@ -110,12 +125,24 @@ async def agent_stream_to_frames(
 
             elif kind == "on_tool_start":
                 if text_open:
+                    # 文本段闭合:把累积的完整文本作为一个 text 部件落库
+                    collected_parts.append({"type": "text", "text": "".join(text_buffer)})
                     yield TextEnd(id=current_text_id or _new_id())
                     text_open = False
                 tool_call_id = event.get("run_id") or _new_id()
                 tool_name = event.get("name", "tool")
-                yield ToolInputStart(toolCallId=tool_call_id, toolName=tool_name)
                 tool_input = event.get("data", {}).get("input")
+                # 工具部件追加到当前位置,记录索引供 output 回填
+                tool_part_index[tool_call_id] = len(collected_parts)
+                collected_parts.append(
+                    {
+                        "type": f"tool-{tool_name}",
+                        "toolCallId": tool_call_id,
+                        "state": "input-available",
+                        "input": tool_input,
+                    }
+                )
+                yield ToolInputStart(toolCallId=tool_call_id, toolName=tool_name)
                 yield ToolInputAvailable(
                     toolCallId=tool_call_id, toolName=tool_name, input=tool_input
                 )
@@ -130,11 +157,28 @@ async def agent_stream_to_frames(
                         output_payload = json.loads(output_payload)
                     except (ValueError, TypeError):
                         pass
+                # 把 output 回填进对应工具部件,标记为 output-available
+                idx = tool_part_index.get(tool_call_id)
+                if idx is not None:
+                    collected_parts[idx]["output"] = output_payload
+                    collected_parts[idx]["state"] = "output-available"
                 yield ToolOutputAvailable(toolCallId=tool_call_id, output=output_payload)
 
         if text_open:
+            collected_parts.append({"type": "text", "text": "".join(text_buffer)})
             yield TextEnd(id=current_text_id or _new_id())
         yield Finish(finishReason="stop")
+
+        # 流正常结束:组装完整 assistant 消息并回调(供路由层持久化)。
+        if on_assistant_message is not None:
+            await on_assistant_message(
+                {
+                    "id": assistant_message_id,
+                    "role": "assistant",
+                    "parts": collected_parts,
+                    "metadata": message_metadata,
+                }
+            )
 
     except Exception as exc:  # noqa: BLE001 —— 流出错以 error 帧收尾,不抛出中断连接
         if text_open:
