@@ -11,6 +11,7 @@
 import { Outlet } from 'react-router-dom'
 
 import ArtifactRoot from '@/components/artifact/artifact-root'
+import AppSidebar from '@/components/app-sidebar'
 import Header from '@/components/header'
 import { KeyboardShortcutHandler } from '@/components/keyboard-shortcut-handler'
 import { LibraryProvider } from '@/components/library/library-context'
@@ -21,7 +22,8 @@ import { Toaster } from '@/components/ui/sonner'
 import { UserProvider } from '@/lib/contexts/user-context'
 
 export default function AppLayout() {
-  // 阶段 3:匿名模式,无登录用户
+  // 阶段 3:匿名模式,无登录用户。
+  // 但历史记录按匿名用户落库,侧栏仍需渲染以展示历史。
   const user = null
   const userId: string | null = null
 
@@ -31,6 +33,8 @@ export default function AppLayout() {
         <UserProvider hasUser={!!userId}>
           <SidebarProvider defaultOpen={false}>
             <LibraryProvider>
+              {/* 匿名模式也渲染侧栏:历史记录按匿名用户存储,需要可见 */}
+              <AppSidebar />
               <KeyboardShortcutHandler />
               <div className="flex min-h-screen w-full flex-col">
                 <Header user={user} />

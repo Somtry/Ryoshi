@@ -42,8 +42,13 @@ class SearchResults:
     answer: str | None = None  # Tavily 直接给的答案摘要
 
     def to_dict(self) -> dict[str, Any]:
-        """转成工具输出 JSON(会作为 search 工具的返回进入消息流与持久化)。"""
+        """转成工具输出 JSON(会作为 search 工具的返回进入消息流与持久化)。
+
+        关键:必须带 state="complete"——前端 SearchSection 靠这个字段判断
+        搜索是否完成、是否渲染结果列表(对应原项目流式搜索工具的完成帧)。
+        """
         return {
+            "state": "complete",
             "results": [
                 {
                     "title": r.title,
