@@ -3,7 +3,7 @@
 /// 设计意图:
 ///   原页面是 React Server Component,服务端注入 userId、模型选择数据等;
 ///   迁到 SPA 后改为客户端挂载时调 /api/models 拉模型选择器数据。
-///   匿名模式下 isGuest=true,模型选择器仍可用(选择结果存 cookie)。
+///   isGuest 由认证状态决定:未登录=匿名访客,已登录=正式用户。
 
 import { useEffect, useState } from 'react'
 
@@ -11,9 +11,11 @@ import { apiFetch } from '@/lib/api-client'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 
 import { Chat } from '@/components/chat'
+import { useAuthCheck } from '@/hooks/use-auth-check'
 
 export default function HomePage() {
   const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+  const { user } = useAuthCheck()
 
   useEffect(() => {
     apiFetch<ModelSelectorData>('/api/models')
@@ -23,9 +25,9 @@ export default function HomePage() {
 
   return (
     <Chat
-      isGuest
+      isGuest={!user}
       isCloudDeployment={false}
-      libraryAvailable={false}
+      libraryAvailable={!!user}
       modelSelectorData={modelSelectorData}
     />
   )

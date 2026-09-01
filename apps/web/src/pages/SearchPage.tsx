@@ -14,9 +14,11 @@ import type { UIMessage } from '@/lib/types/ai'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 
 import { Chat } from '@/components/chat'
+import { useAuthCheck } from '@/hooks/use-auth-check'
 
 export default function SearchPage() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuthCheck()
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'not-found' }
@@ -69,9 +71,9 @@ export default function SearchPage() {
     <Chat
       id={id}
       savedMessages={state.messages}
-      isGuest
+      isGuest={!user}
       isCloudDeployment={false}
-      libraryAvailable={false}
+      libraryAvailable={!!user}
       modelSelectorData={modelSelectorData}
     />
   )

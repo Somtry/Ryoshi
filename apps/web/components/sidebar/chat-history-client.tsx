@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
 import { toast } from 'sonner'
 
+import { apiFetch } from '@/lib/api-client'
 import { Chat as DBChat } from '@/lib/db/schema'
 
 import {
@@ -31,12 +32,8 @@ export function ChatHistoryClient() {
   const fetchInitialChats = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/chats?offset=0&limit=20`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch initial chat history')
-      }
       const { chats: dbChats, nextOffset: newNextOffset } =
-        (await response.json()) as ChatPageResponse
+        await apiFetch<ChatPageResponse>('/api/chats?offset=0&limit=20')
 
       setChats(dbChats)
       setNextOffset(newNextOffset)
@@ -70,12 +67,8 @@ export function ChatHistoryClient() {
 
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/chats?offset=${nextOffset}&limit=20`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch more chat history')
-      }
       const { chats: dbChats, nextOffset: newNextOffset } =
-        (await response.json()) as ChatPageResponse
+        await apiFetch<ChatPageResponse>(`/api/chats?offset=${nextOffset}&limit=20`)
 
       setChats(prevChats => [...prevChats, ...dbChats])
       setNextOffset(newNextOffset)

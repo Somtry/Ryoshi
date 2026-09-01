@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner'
 
 import { saveNote } from '@/lib/actions/notes'
+import { apiFetch } from '@/lib/api-client'
 import { captureClient } from '@/lib/analytics/posthog-client'
 import { stripSpecBlocks } from '@/lib/render/strip-spec-blocks'
 import type { SearchResultItem } from '@/lib/types'
@@ -166,9 +167,9 @@ export function MessageActions({
     captureClient('feedback_control_clicked', { score, chatId, isGuest })
     setIsSubmittingFeedback(true)
     try {
-      const response = await fetch('/api/feedback', {
+      // 消息级反馈走 apiFetch(带 token),后端记录 traceId+score
+      await apiFetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           traceId,
           score,
@@ -176,27 +177,13 @@ export function MessageActions({
         })
       })
 
-      if (response.ok) {
-        // The route answers 200 without writing a score when tracing is off, so
-        // this records that the request succeeded, not that a score exists.
-        captureClient('feedback_recorded', { score, chatId, isGuest })
-        setFeedbackScore(score)
-        toast.success(
-          score === 1
-            ? 'Thanks for the feedback!'
-            : 'Thanks for letting us know!'
-        )
-      } else {
-        captureClient('feedback_failed', {
-          score,
-          chatId,
-          isGuest,
-          status: response.status,
-          reason: 'response'
-        })
-        console.error('Failed to submit feedback')
-        toast.error('Failed to submit feedback')
-      }
+      captureClient('feedback_recorded', { score, chatId, isGuest })
+      setFeedbackScore(score)
+      toast.success(
+        score === 1
+          ? 'Thanks for the feedback!'
+          : 'Thanks for letting us know!'
+      )
     } catch (error) {
       captureClient('feedback_failed', {
         score,
