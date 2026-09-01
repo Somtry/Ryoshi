@@ -15,7 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ryoshi.auth import AuthError, AuthUser, resolve_user
 from ryoshi.db.engine import get_session
-from ryoshi.db.persistence import get_chats_page, load_chat
+from ryoshi.db.persistence import (
+    clear_chats,
+    delete_chat,
+    get_chats_page,
+    load_chat,
+    update_chat_visibility,
+)
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
@@ -54,3 +60,40 @@ async def get_chat(
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
     return chat
+
+
+@router.post("/{chat_id}/share")
+async def share_chat(
+    chat_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: AuthUser = Depends(_current_user),
+):
+    """把会话设为公开,返回可分享的 id。对应原项目 shareChat。
+
+    仅 owner 可分享;非 owner 或会话不存在返回 404(不泄露存在性)。
+    """
+    ok = await update_chat_visibility(session, chat_id, user.id, "public")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return {"shareId": chat_id}
+
+
+@router.delete("/{chat_id}", status_code=204)
+async def delete_chat_route(
+    chat_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: AuthUser = Depends(_current_user),
+):
+    """删除一场聊天(级联删除消息与 parts)。仅 owner 可操作。"""
+    ok = await delete_chat(session, chat_id, user.id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+
+@router.delete("", status_code=204)
+async def clear_all_chats(
+    session: AsyncSession = Depends(get_session),
+    user: AuthUser = Depends(_current_user),
+):
+    """清空当前用户的全部聊天。对应原项目 clearChats。"""
+    await clear_chats(session, user.id)

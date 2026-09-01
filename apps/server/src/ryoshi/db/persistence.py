@@ -380,3 +380,62 @@ async def get_chats_page(
         ],
         "nextOffset": offset + limit if has_more else None,
     }
+
+
+async def update_chat_visibility(
+    session: AsyncSession, chat_id: str, user_id: str, visibility: str
+) -> bool:
+    """把会话可见性设为 public/private。对应原项目 updateChatVisibility。
+
+    仅 owner 可修改;非 owner 返回 False。
+    """
+    chat = await session.get(Chat, chat_id)
+    if chat is None or chat.user_id != user_id:
+        return False
+    chat.visibility = visibility
+    await session.commit()
+    return True
+
+
+async def delete_chat(session: AsyncSession, chat_id: str, user_id: str) -> bool:
+    """删除一场聊天(级联删除消息与 parts)。对应原项目 deleteChat。
+
+    仅 owner 可删除;非 owner 返回 False。
+    SQLAlchemy 的 session.delete() 不会自动级联到未加载的 ORM 对象,
+    需要显式按 FK 顺序删: parts → messages → chat。
+    """
+    chat = await session.get(Chat, chat_id)
+    if chat is None or chat.user_id != user_id:
+        return False
+
+    # 显式级联删除(FK 有 ondelete=CASCADE,但 ORM 层面需要显式删)
+    msg_ids_result = await session.execute(
+        select(Message.id).where(Message.chat_id == chat_id)
+    )
+    msg_ids = [row[0] for row in msg_ids_result.all()]
+    if msg_ids:
+        await session.execute(delete(Part).where(Part.message_id.in_(msg_ids)))
+        await session.execute(delete(Message).where(Message.chat_id == chat_id))
+    await session.delete(chat)
+    await session.commit()
+    return True
+
+
+async def clear_chats(session: AsyncSession, user_id: str) -> int:
+    """清空某用户的全部聊天。对应原项目 clearChats。返回删除条数。"""
+    result = await session.execute(select(Chat.id).where(Chat.user_id == user_id))
+    chat_ids = [row[0] for row in result.all()]
+    if not chat_ids:
+        return 0
+
+    # 批量级联: parts → messages → chats
+    msg_ids_result = await session.execute(
+        select(Message.id).where(Message.chat_id.in_(chat_ids))
+    )
+    msg_ids = [row[0] for row in msg_ids_result.all()]
+    if msg_ids:
+        await session.execute(delete(Part).where(Part.message_id.in_(msg_ids)))
+    await session.execute(delete(Message).where(Message.chat_id.in_(chat_ids)))
+    await session.execute(delete(Chat).where(Chat.user_id == user_id))
+    await session.commit()
+    return len(chat_ids)
