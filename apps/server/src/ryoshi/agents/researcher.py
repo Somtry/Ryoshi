@@ -231,7 +231,10 @@ Current date: {current_date}
 """
 
 
-@tool
+# 工具名显式声明为 camelCase:LangChain @tool 默认取函数名(snake_case),
+# 但前端渲染与 parts 表列映射都按原项目的 camelCase(tool-todoWrite)。
+# 不显式指定会导致工具部件类型对不上、追问卡片不渲染、持久化落错列。
+@tool("todoWrite")
 async def todo_write(todos: list[dict]) -> dict:
     """创建或更新待办任务列表,用于跟踪复杂任务的进度。
 
@@ -254,7 +257,7 @@ async def todo_write(todos: list[dict]) -> dict:
     }
 
 
-@tool
+@tool("askQuestion")
 async def ask_question(question: str, options: list[str] | None = None) -> dict:
     """向用户提出澄清问题。当查询含糊、缺少关键信息时使用。
 

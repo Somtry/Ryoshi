@@ -21,7 +21,10 @@ from typing import Any
 
 from ryoshi.chat.frames import (
     Finish,
+    FinishStep,
+    SourceUrl,
     Start,
+    StartStep,
     TextDelta,
     TextEnd,
     TextStart,
@@ -65,10 +68,6 @@ async def agent_stream_to_frames(
     assistant_message_id = message_id or _new_id()
     yield Start(messageId=assistant_message_id, messageMetadata=message_metadata)
 
-    # 文本块 id:同一轮连续文本共用一个 id,模型开始新一轮文本时换新的
-    current_text_id: str | None = None
-    text_open = False
-
     # 收集 assistant 消息的部件(供持久化)。顺序即 parts.order:
     # 文本段与工具部件按事件发生的真实先后追加,保持与渲染顺序一致。
     collected_parts: list[dict] = []
@@ -77,6 +76,18 @@ async def agent_stream_to_frames(
     tool_part_index: dict[str, int] = {}
     # 当前文本段的累积内容(text-delta 是增量,落库要完整文本)
     text_buffer: list[str] = []
+
+    # step 边界:AI SDK 在每个模型步(一次 LLM 调用 ± 其后的工具执行)开始时
+    # 自动发 start-step、步结束发 finish-step。前端据此向 parts 里插入
+    # {type:'step-start'} 分隔件,驱动"分段渲染/折叠"的交互。
+    # LangGraph 没有等价物,这里手动对齐:graph 启动即第一步开始。
+    yield StartStep()
+    collected_parts.append({"type": "step-start"})
+    step_open = True
+
+    # 文本块 id:同一轮连续文本共用一个 id,模型开始新一轮文本时换新的
+    current_text_id: str | None = None
+    text_open = False
 
     async def raw_text_deltas(stream) -> AsyncIterator[str]:
         nonlocal current_text_id, text_open
@@ -118,8 +129,10 @@ async def agent_stream_to_frames(
                     yield TextStart(id=current_text_id)
                     text_open = True
                 text_buffer.append(text)
-                # 文本增量经 smoothStream 平滑后再发
-                async def _single():
+                # 文本增量经 smoothStream 平滑后再发。
+                # 注意必须用默认参数把当前 text 绑进闭包:直接引用循环变量,
+                # 若生成器被延迟消费会读到下一轮的值(B023)。
+                async def _single(text: str = text):
                     yield text
                 async for piece in smooth_text(_single()):
                     yield TextDelta(id=current_text_id or _new_id(), delta=piece)
@@ -150,6 +163,7 @@ async def agent_stream_to_frames(
 
             elif kind == "on_tool_end":
                 tool_call_id = event.get("run_id") or _new_id()
+                tool_name_end = event.get("name", "tool")
                 output = event.get("data", {}).get("output")
                 # LangChain 工具输出常包一层 ToolMessage;取其 content
                 output_payload = getattr(output, "content", output)
@@ -165,9 +179,39 @@ async def agent_stream_to_frames(
                     collected_parts[idx]["state"] = "output-available"
                 yield ToolOutputAvailable(toolCallId=tool_call_id, output=output_payload)
 
+                # 搜索工具返回后,为每条结果发 source-url 帧(对应 AI SDK 在
+                # 工具结果为 source 列表时的自动行为)。前端把它们收进消息 parts,
+                # 渲染"来源列表"面板;持久化 parts 也会带上 source-url。
+                if tool_name_end == "search" and isinstance(output_payload, dict):
+                    for r in output_payload.get("results") or []:
+                        url = r.get("url") if isinstance(r, dict) else None
+                        if not url:
+                            continue
+                        source_part = {
+                            "type": "source-url",
+                            "sourceId": _new_id(),
+                            "url": url,
+                            "title": r.get("title"),
+                        }
+                        collected_parts.append(source_part)
+                        yield SourceUrl(
+                            sourceId=source_part["sourceId"],
+                            url=url,
+                            title=r.get("title"),
+                        )
+
+                # 工具执行完毕意味着当前 step 结束;下一个模型/工具事件会新开 step。
+                # step-start 部件标记的是"新一步的起点",故在新 StartStep 时落库。
+                if step_open:
+                    yield FinishStep()
+                    yield StartStep()
+                    collected_parts.append({"type": "step-start"})
+
         if text_open:
             collected_parts.append({"type": "text", "text": "".join(text_buffer)})
             yield TextEnd(id=current_text_id or _new_id())
+        if step_open:
+            yield FinishStep()
         yield Finish(finishReason="stop")
 
         # 流正常结束:组装完整 assistant 消息并回调(供路由层持久化)。

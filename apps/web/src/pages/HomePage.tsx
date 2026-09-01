@@ -16,7 +16,7 @@ export default function HomePage() {
   const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
 
   useEffect(() => {
-    apiFetch('/api/models')
+    apiFetch<ModelSelectorData>('/api/models')
       .then(setModelSelectorData)
       .catch(() => setModelSelectorData(undefined))
   }, [])

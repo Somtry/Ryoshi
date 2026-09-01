@@ -12,7 +12,7 @@
 
 from fastapi import APIRouter
 
-from ryoshi.agents.models import is_provider_enabled
+from ryoshi.agents.models import ModelConfigError, default_model_id, is_provider_enabled
 from ryoshi.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["models"])
@@ -56,12 +56,12 @@ async def get_models():
         if is_provider_enabled(provider_id):
             models_by_provider[provider_id] = models
 
-    # 当前选中:优先 OPENAI_COMPATIBLE_MODELS 第一个,否则第一个可用模型
-    selected_key = ""
-    if models_by_provider:
-        first_provider = sorted(models_by_provider.keys())[0]
-        first_model = models_by_provider[first_provider][0]
-        selected_key = f"{first_model['providerId']}:{first_model['id']}"
+    # 当前选中:与后端实际默认模型保持一致(default_model_id 的优先级),
+    # 避免"选择器显示 anthropic 而后端跑 openai-compatible"的不一致。
+    try:
+        selected_key = default_model_id()
+    except ModelConfigError:
+        selected_key = ""
 
     return {
         "enabled": True,

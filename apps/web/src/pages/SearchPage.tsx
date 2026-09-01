@@ -8,8 +8,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
+import { apiFetch } from '@/lib/api-client'
 import { loadChat } from '@/lib/actions/chat'
 import type { UIMessage } from '@/lib/types/ai'
+import type { ModelSelectorData } from '@/lib/types/model-selector'
 
 import { Chat } from '@/components/chat'
 
@@ -20,6 +22,15 @@ export default function SearchPage() {
     | { status: 'not-found' }
     | { status: 'ready'; messages: UIMessage[] }
   >({ status: 'loading' })
+  // 模型选择器数据:与 HomePage 一致,否则刷新进入历史会话时输入框右下角的
+  // 模型选择器会消失(chat-panel 要求 modelSelectorData 非空才渲染)。
+  const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+
+  useEffect(() => {
+    apiFetch<ModelSelectorData>('/api/models')
+      .then(setModelSelectorData)
+      .catch(() => setModelSelectorData(undefined))
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -61,6 +72,7 @@ export default function SearchPage() {
       isGuest
       isCloudDeployment={false}
       libraryAvailable={false}
+      modelSelectorData={modelSelectorData}
     />
   )
 }
