@@ -11,6 +11,10 @@ import { CHAT_API } from '@/lib/api'
 import { getAccessToken } from '@/lib/api-client'
 import { summarizeGenui } from '@/lib/analytics/genui-summary'
 import { captureClient, getDistinctId } from '@/lib/analytics/posthog-client'
+import {
+  MODEL_SELECTION_COOKIE,
+  parseModelSelectionCookie
+} from '@/lib/config/model-selection-cookie'
 import { ChatProvider } from '@/lib/contexts/chat-context'
 import { generateId } from '@/lib/db/schema'
 import {
@@ -168,6 +172,11 @@ export function Chat({
             analyticsId: getDistinctId(),
             // 后端据此选择 Quick/Adaptive 智能体(对应原项目的 cookie 记忆)
             searchMode: getCookie('searchMode') === 'adaptive' ? 'adaptive' : 'quick',
+            // 模型选择:从 cookie 读取用户选择,后端据此覆盖默认模型
+            modelId: (() => {
+              const sel = parseModelSelectionCookie(getCookie(MODEL_SELECTION_COOKIE))
+              return sel ? `${sel.providerId}:${sel.modelId}` : undefined
+            })(),
             ...(isGuest ? { messages } : {}),
             message:
               trigger === 'regenerate-message' &&

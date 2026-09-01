@@ -31,12 +31,30 @@ class TextPart(BaseModel):
     text: str | None = None
 
 
+class FilePart(BaseModel):
+    """用户上传的附件(图片/PDF)。"""
+
+    type: str  # "file"
+    url: str | None = None
+    filename: str | None = None
+    mediaType: str | None = None
+    key: str | None = None
+
+
+class DataPart(BaseModel):
+    """自定义数据部件(粘贴内容/引用上下文/笔记/目标 URL)。"""
+
+    type: str  # "data-pastedContent" / "data-quotedContext" / ...
+    data: dict | None = None
+    id: str | None = None
+
+
 class IncomingMessage(BaseModel):
-    """前端 useChat 提交的用户消息。parts 里取文本即可(附件在阶段 4 处理)。"""
+    """前端 useChat 提交的用户消息。parts 包含文本/文件/数据部件。"""
 
     id: str | None = None
     role: str = "user"
-    parts: list[TextPart] = []
+    parts: list[dict] = []  # 宽接:dict 保留全部字段,后续按 type 分派
 
 
 class ChatRequest(BaseModel):
@@ -45,15 +63,47 @@ class ChatRequest(BaseModel):
     searchMode: str = "quick"
     # 前端在首轮提交时置 true,后端据此建会话(从首条消息生成标题)
     isNewChat: bool = False
+    # 用户选择的模型(cookie 中的 selectedModel,格式 "providerId:modelId")
+    modelId: str | None = None
+    # 前端传的 trigger(submit-message / regenerate-message)
+    trigger: str = "submit-message"
+    # regenerate 时要重新生成的消息 id
+    messageId: str | None = None
+    # PostHog 匿名 ID(未登录用户的事件归属)
+    analyticsId: str | None = None
     # 匿名模式下前端把全部历史消息发过来(对应原项目 prepareMessages 的 messages)
     messages: list[IncomingMessage] = []
 
 
 def _extract_user_text(req: ChatRequest) -> str:
-    """从消息 parts 抽出纯文本(拼接所有 text 部件)。"""
+    """从消息 parts 抽出纯文本(拼接 text 部件 + 文件引用 + 数据部件中的文本)。"""
     if not req.message:
         return ""
-    return "\n".join(p.text for p in req.message.parts if p.type == "text" and p.text)
+    parts = req.message.parts
+    texts: list[str] = []
+    for p in parts:
+        ptype = p.get("type", "")
+        if ptype == "text" and p.get("text"):
+            texts.append(p["text"])
+        elif ptype == "file" and p.get("url"):
+            # 文件附件:把 URL 和类型注入上下文,让模型知道有附件
+            texts.append(f"[附件: {p.get('filename', 'file')} ({p.get('mediaType', '')})]({p['url']})")
+        elif ptype == "data-pastedContent" and p.get("data"):
+            # 粘贴的大段内容
+            content = p["data"].get("content", "") if isinstance(p["data"], dict) else ""
+            if content:
+                texts.append(content)
+        elif ptype == "data-quotedContext" and p.get("data"):
+            # 引用的上文
+            content = p["data"].get("content", "") if isinstance(p["data"], dict) else ""
+            if content:
+                texts.append(f"> {content}")
+        elif ptype == "data-sourceUrl" and p.get("data"):
+            # 用户指定的目标 URL
+            url = p["data"].get("url", "") if isinstance(p["data"], dict) else ""
+            if url:
+                texts.append(f"请分析这个页面: {url}")
+    return "\n".join(texts)
 
 
 @router.post("/chat", response_model=None)
@@ -71,14 +121,13 @@ async def chat(
     # ---- 三层限流(仅云端部署生效) ----
     # 对应原项目 app/api/chat/route.ts 的限流检查顺序:
     # 访客 IP → 用户总量 → adaptive 单独
+    # 0. Adaptive 模式在云端需要登录(对齐原型 route.ts:113-134)
+    from ryoshi.config import get_settings as _get_settings
     from ryoshi.ratelimit import (
         check_adaptive_limit,
         check_guest_limit,
         check_overall_chat_limit,
     )
-
-    # 0. Adaptive 模式在云端需要登录(对齐原型 route.ts:113-134)
-    from ryoshi.config import get_settings as _get_settings
 
     if (
         req.searchMode == "adaptive"
@@ -161,9 +210,19 @@ async def chat(
 
         return StreamingResponse(empty(), headers=SSE_HEADERS)
 
-    # 阶段 3 固定用 Quick 模式与默认模型;模型选择/searchMode 在阶段 4 接入 cookie 逻辑
+    # 模型选择:优先用前端 cookie 中的选择,无效则回退默认模型
+    # 对应原项目 lib/utils/model-selection.ts 的 cookie 读取逻辑
     try:
-        model_id = default_model_id()
+        if req.modelId:
+            # 校验 provider 可用(有密钥),不可用则抛 ModelConfigError
+            from ryoshi.agents.models import is_provider_enabled
+
+            provider_id = req.modelId.split(":")[0] if ":" in req.modelId else ""
+            if not is_provider_enabled(provider_id):
+                raise ModelConfigError(f"provider 未启用: {provider_id}")
+            model_id = req.modelId
+        else:
+            model_id = default_model_id()
     except ModelConfigError as exc:
         # 未配置任何模型密钥:返回规范 error 帧而非裸 500,前端能统一展示。
         # 注意:except 的 exc 在块结束后会被解释器删除,闭包须先存到局部变量。
@@ -229,7 +288,7 @@ async def chat(
         distinct_id = (
             user.id
             if not user.is_anonymous
-            else getattr(req, "analyticsId", None) or user.id
+            else req.analyticsId or user.id
         )
         # 对话轮次:新聊天为 1;否则数历史中的 user 消息条数
         conversation_turn = 1
@@ -250,7 +309,7 @@ async def chat(
             search_mode=req.searchMode,
             conversation_turn=conversation_turn,
             is_new_chat=req.isNewChat,
-            trigger="submit-message",
+            trigger=req.trigger,
             chat_id=req.chatId or "",
             distinct_id=distinct_id,
             is_guest=user.is_anonymous,
@@ -269,13 +328,17 @@ async def chat(
     chat_id = req.chatId
 
     async def persist_user_message() -> None:
-        """把用户消息落库。新聊天顺带建会话(从首条消息生成标题)。"""
+        """把用户消息落库。新聊天顺带建会话(从首条消息生成标题)。
+
+        parts 直接透传 dict(不经过 TextPart/FilePart 等窄化模型),
+        保留 file/data 部件的完整字段(url/filename/mediaType 等)。
+        """
         if not chat_id or not req.message:
             return
         user_msg = {
             "id": req.message.id,
             "role": "user",
-            "parts": [p.model_dump() for p in req.message.parts],
+            "parts": req.message.parts,  # 已是 list[dict],直接透传
             "metadata": None,
         }
         async with get_session_factory()() as session:
