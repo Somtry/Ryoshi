@@ -2,52 +2,38 @@
 
 > AI 驱动的生成式 UI 搜索引擎 —— Python 后端 + React 前端。
 
-Ryoshi 是在开源项目 morhpic 的基础上,用 **Python(FastAPI + LangGraph)** 重写后端、保留 **React** 前端演化而来的自有项目。启动效果与原站一致,后端则是一套干净、可读、方便长期改造的 Python 工程。
+Ryoshi 是在开源项目 morhpic 的基础上，用 **Python(FastAPI + LangGraph)** 重写后端、保留 **React** 前端演化而来的自有项目。启动效果与原站一致，后端则是一套干净、可读、方便长期改造的 Python 工程。
 
 ## 架构
 
 ```
-┌───────────────────────────────┐      ┌────────────────────────────────┐
-│ apps/web (前端)                │      │ apps/server (后端)              │
-│ Vite + React 19 + shadcn/ui   │ SSE  │ FastAPI + LangGraph             │
-│ 原 morhpic 组件几乎原样保留     │◀────▶│ 智能体 / 搜索 / 数据库 / 流式     │
-└───────────────────────────────┘      └────────────────────────────────┘
-        │                                        │
-        └──────────────┬─────────────────────────┘
-                       ▼
-        PostgreSQL · Redis · SearXNG   (docker-compose 一键起)
+浏览器(React SPA)
+  │
+  │  HTTP + SSE (UIMessageStream 协议)
+  ▼
+FastAPI (apps/server) ─── LangGraph 智能体
+  │                          │
+  ├── PostgreSQL (聊天历史)   ├── search 工具(Tavily/SearXNG/Brave/Exa,含降级)
+  ├── Redis (限流/缓存)       ├── fetch 工具(网页正文提取)
+  ├── S3/R2 (文件上传)       ├── todoWrite/askQuestion(adaptive 模式)
+  ├── Langfuse (链路追踪)     └── 上下文窗口截断
+  └── PostHog (行为分析)
 ```
 
-- **前端**：保留原项目的 React 组件与样式（聊天界面、流式渲染、Generative UI),仅把路由从 Next.js App Router 迁到 React Router,API 指向 Python 后端
-- **后端**：Python 3.12 + FastAPI,智能体用 LangGraph 编排,ORM 用 SQLAlchemy 2.0,链路追踪 Langfuse、行为分析 PostHog
-
-## 目录
-
-```
-apps/
-  web/        # React 前端(Vite + React Router)
-  server/     # Python 后端(FastAPI + LangGraph)
-packages/
-  protocol/   # SSE 流式协议契约(前后端共享)
-docs/
-  PLAN.md     # 完整改造计划
-docker-compose.yaml
-```
+- **前端**：保留原项目的 React 组件与样式（聊天界面、流式渲染、Generative UI)，从 Next.js App Router 迁到 Vite + React Router,API 指向 Python 后端
+- **后端**:Python 3.12 + FastAPI，智能体用 LangGraph 编排，ORM 用 SQLAlchemy 2.0，链路追踪 Langfuse、行为分析 PostHog
 
 ## 快速开始
 
-### 后端(Python,需要 uv)
+### 本地开发（推荐）
 
 ```bash
+# 终端 1: Python 后端
 cd apps/server
 uv sync                                    # 装依赖(自动下载 Python 3.12)
-uv run uvicorn ryoshi.main:app --reload    # 起服务,http://localhost:8000
-curl http://localhost:8000/health          # 冒烟测试
-```
+uv run uvicorn ryoshi.main:app --reload    # http://localhost:8000
 
-### 前端(React,需要 pnpm)
-
-```bash
+# 终端 2: React 前端
 cd apps/web
 pnpm install
 pnpm dev                                   # http://localhost:3000
@@ -63,31 +49,53 @@ docker compose up -d               # 起 postgres/redis/searxng/server/web
 
 ## 环境变量
 
-后端环境变量统一 `RYOSHI_` 前缀(对应原项目 `MORPHIC_` 前缀)。核心变量:
+核心变量（完整清单见 `.env.local.example`):
 
 | 变量 | 说明 |
 |---|---|
-| `DATABASE_URL` | PostgreSQL 连接串 |
+| `DATABASE_URL` | PostgreSQL 连接串（asyncpg 驱动） |
 | `REDIS_URL` | Redis 连接串 |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | AI 提供商密钥(配其一即可起步) |
-| `TAVILY_API_KEY` / `SEARXNG_BASE_URL` 等 | 搜索提供商 |
-| `ENABLE_AUTH` | 是否启用 Supabase 认证(默认关,匿名模式) |
-| `RYOSHI_CLOUD_DEPLOYMENT` | 是否云端部署(云端强制认证) |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | AI 提供商密钥（配其一即可起步） |
+| `OPENAI_COMPATIBLE_*` | 通用 OpenAI 兼容端点（DeepSeek 等） |
+| `TAVILY_API_KEY` / `BRAVE_API_KEY` / `EXA_API_KEY` / `SEARXNG_BASE_URL` | 搜索提供商（Tavily 默认，失败自动降级） |
+| `ENABLE_AUTH` | 是否启用 Supabase 认证（默认关，匿名模式） |
+| `SUPABASE_URL` / `SUPABASE_JWT_SECRET` | Supabase 项目地址与 JWT 密钥 |
+| `RYOSHI_CLOUD_DEPLOYMENT` | 云端部署（强制认证 + 限流 + 分析） |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | 链路追踪（可选） |
 
-完整说明见 [docs/PLAN.md](./docs/PLAN.md)。
+## 如何新增工具 / 模型 / 搜索源
+
+### 新增工具
+
+```python
+# apps/server/src/ryoshi/agents/researcher.py
+
+@tool("myTool")  # 注意:名称用 camelCase,与前端 tool-myTool 对应
+async def my_tool(query: str) -> dict:
+    """工具描述(会进入模型 prompt)。"""
+    return {"result": "..."}
+```
+
+然后在 `create_quick_researcher` 或 `create_adaptive_researcher` 的 tools 列表中加上它。前端在 `tool-section.tsx` 中注册渲染分支。
+
+### 新增模型
+
+在 `agents/models.py` 的 `get_model` 中加一个 provider 分支，并在 `api/models.py` 的 `_STATIC_MODELS` 中声明可用模型。
+
+### 新增搜索源
+
+在 `tools/search.py` 中继承 `SearchProvider` 协议，实现 `_search` 方法，然后在 `_PROVIDERS` 字典中注册。降级链自动生效。
 
 ## 开发进度
 
-本项目处于从 morhpic 迁移的进行中,按阶段推进:
-
-- [x] **阶段 0** · 地基:Python 骨架跑通 `/health`、前端拷贝、全量品牌替换
-- [ ] **阶段 1** · 数据层:SQLAlchemy 模型 + Alembic 迁移
-- [ ] **阶段 2** · 协议契约:UIMessageStream SSE 逆向 + Python 实现
-- [ ] **阶段 3** · 最小闭环:Quick 模式端到端提问
-- [ ] **阶段 4** · 能力补全:Adaptive / 多搜索源 / 上传 / 认证 / 分享
-- [ ] **阶段 5** · 观测与打磨:Langfuse + PostHog + 三层限流
-- [ ] **阶段 6** · 验收与文档
+- [x] **阶段 0** · 地基：Python 骨架、前端拷贝、品牌替换
+- [x] **阶段 1** · 数据层：SQLAlchemy 模型 + Alembic 迁移
+- [x] **阶段 2** · 协议契约：UIMessageStream SSE 逆向 + Python 实现
+- [x] **阶段 3** · 最小闭环：Quick 模式端到端提问
+- [x] **阶段 4** · 能力补全：Adaptive / 多搜索源 / 上传 / 认证 / 分享 / 笔记 / 反馈
+- [x] **阶段 5** · 观测与打磨：Langfuse + PostHog + 三层限流
+- [x] **阶段 6** · 验收与文档
 
 ## 许可
 
-基于 Apache-2.0 协议的 morhpic 项目演化而来,详见 LICENSE。
+基于 Apache-2.0 协议的 morhpic 项目演化而来，详见 LICENSE。
