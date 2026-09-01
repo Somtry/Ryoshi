@@ -18,7 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ryoshi.api.chat import router as chat_router
 from ryoshi.api.chats import router as chats_router
+from ryoshi.api.feedback import router as feedback_router
 from ryoshi.api.models import router as models_router
+from ryoshi.api.notes import router as notes_router
 from ryoshi.api.upload import router as upload_router
 from ryoshi.config import get_settings
 
@@ -66,6 +68,8 @@ def create_app() -> FastAPI:
     app.include_router(chats_router)
     app.include_router(models_router)
     app.include_router(upload_router)
+    app.include_router(notes_router)
+    app.include_router(feedback_router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
