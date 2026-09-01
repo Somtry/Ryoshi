@@ -13,10 +13,13 @@
 
 import uuid
 
-from fastapi import APIRouter, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ryoshi.auth import resolve_user
 from ryoshi.config import get_settings
+from ryoshi.db.engine import get_session
+from ryoshi.db.models import LibraryFile
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
@@ -69,11 +72,17 @@ async def upload_file(
     file: UploadFile,
     chatId: str = Form(...),
     authorization: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ):
-    """接收 multipart 文件,存到对象存储,返回 {url, key, mediaType, filename}。"""
+    """接收 multipart 文件,存到对象存储,返回 {success, file: {...}}。
+
+    对应原项目 app/api/upload/route.ts。返回的 file 对象包含:
+    url/key/mediaType/filename/size + 可选 id/libraryFile(登录用户写库后返回)。
+    """
     s = get_settings()
     # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT
-    user_id = resolve_user(authorization, allow_anonymous_fallback=True).id
+    user = resolve_user(authorization, allow_anonymous_fallback=True)
+    user_id = user.id
 
     if not _is_storage_configured():
         raise HTTPException(
@@ -110,13 +119,43 @@ async def upload_file(
         )
 
     public_url = s.r2_public_url or f"{_s3_config()['endpoint_url'].rstrip('/')}/{bucket}"
-    # 响应形状与原型一致: {success: true, file: {...}}(前端 chat-panel 按此解构)
-    return {
-        "success": True,
-        "file": {
-            "url": f"{public_url.rstrip('/')}/{key}",
-            "key": key,
-            "mediaType": media_type,
-            "filename": file.filename or "file",
-        },
+    file_url = f"{public_url.rstrip('/')}/{key}"
+
+    # 登录用户写库(对应原项目 createLibraryFile);匿名用户跳过
+    library_file = None
+    if not user.is_anonymous:
+        library_file = LibraryFile(
+            id=uuid.uuid4().hex[:24],
+            user_id=user_id,
+            chat_id=chatId,
+            filename=file.filename or "file",
+            object_key=key,
+            media_type=media_type,
+            size=len(data),
+        )
+        session.add(library_file)
+        await session.commit()
+
+    # 响应形状与原型一致: {success: true, file: {...}}
+    # 前端 chat-panel 按此解构,需要 id/libraryFile/size 字段
+    result: dict = {
+        "url": file_url,
+        "key": key,
+        "mediaType": media_type,
+        "filename": file.filename or "file",
+        "size": len(data),
     }
+    if library_file:
+        result["id"] = library_file.id
+        result["libraryFile"] = {
+            "id": library_file.id,
+            "filename": library_file.filename,
+            "objectKey": library_file.object_key,
+            "mediaType": library_file.media_type,
+            "size": library_file.size,
+            "key": library_file.object_key,
+            "url": file_url,
+            "createdAt": library_file.created_at.isoformat() if library_file.created_at else None,
+        }
+
+    return {"success": True, "file": result}

@@ -1,0 +1,13 @@
+/// 忘记密码页。对应原 app/auth/forgot-password/page.tsx。
+
+import { ForgotPasswordForm } from '@/components/forgot-password-form'
+
+export default function ForgotPasswordPage() {
+  return (
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <ForgotPasswordForm />
+      </div>
+    </div>
+  )
+}
