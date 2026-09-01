@@ -110,9 +110,13 @@ async def upload_file(
         )
 
     public_url = s.r2_public_url or f"{_s3_config()['endpoint_url'].rstrip('/')}/{bucket}"
+    # 响应形状与原型一致: {success: true, file: {...}}(前端 chat-panel 按此解构)
     return {
-        "url": f"{public_url.rstrip('/')}/{key}",
-        "key": key,
-        "mediaType": media_type,
-        "filename": file.filename or "file",
+        "success": True,
+        "file": {
+            "url": f"{public_url.rstrip('/')}/{key}",
+            "key": key,
+            "mediaType": media_type,
+            "filename": file.filename or "file",
+        },
     }

@@ -77,6 +77,23 @@ async def chat(
         check_overall_chat_limit,
     )
 
+    # 0. Adaptive 模式在云端需要登录(对齐原型 route.ts:113-134)
+    from ryoshi.config import get_settings as _get_settings
+
+    if (
+        req.searchMode == "adaptive"
+        and user.is_anonymous
+        and _get_settings().ryoshi_cloud_deployment
+    ):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": "Sign in to use Adaptive mode. Quick mode remains available without an account.",
+                "mode": "adaptive",
+                "authRequired": True,
+            },
+        )
+
     # 1. 访客限流(未登录时按 IP)
     if user.is_anonymous:
         client_ip = request.client.host if request.client else None
@@ -106,7 +123,7 @@ async def chat(
             return JSONResponse(
                 status_code=429,
                 content={
-                    "error": "Daily chat limit reached.",
+                    "error": "Daily chat limit reached. Please try again tomorrow.",
                     "remaining": 0,
                     "resetAt": overall_result.reset_at,
                     "limit": overall_result.limit,
@@ -125,7 +142,8 @@ async def chat(
             return JSONResponse(
                 status_code=429,
                 content={
-                    "error": "Daily adaptive mode limit reached.",
+                    "error": "Daily limit for Adaptive mode reached. Please try again tomorrow, or continue in Quick mode.",
+                    "mode": "adaptive",
                     "remaining": 0,
                     "resetAt": adaptive_result.reset_at,
                     "limit": adaptive_result.limit,
