@@ -10,17 +10,16 @@
     响应为 text/event-stream,帧格式严格遵循 packages/protocol/PROTOCOL.md。
 """
 
-from fastapi import APIRouter, Header
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Header, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ryoshi.agents.models import ModelConfigError, default_model_id
-from ryoshi.agents.researcher import build_initial_messages, create_quick_researcher
-from ryoshi.auth import AuthUser, resolve_user
+from ryoshi.agents.researcher import create_quick_researcher
+from ryoshi.auth import resolve_user
 from ryoshi.chat.frames import Error
 from ryoshi.chat.sse import SSE_HEADERS, encode_done, encode_frame
 from ryoshi.chat.stream import agent_stream_to_frames
-from ryoshi.config import get_settings
 from ryoshi.db.engine import get_session_factory
 from ryoshi.db.persistence import create_chat_with_first_message, upsert_message
 
@@ -57,15 +56,86 @@ def _extract_user_text(req: ChatRequest) -> str:
     return "\n".join(p.text for p in req.message.parts if p.type == "text" and p.text)
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=None)
 async def chat(
-    req: ChatRequest, authorization: str | None = Header(None)
-) -> StreamingResponse:
+    req: ChatRequest,
+    request: Request,
+    authorization: str | None = Header(None),
+) -> StreamingResponse | JSONResponse:
     """处理一次提问并流式返回回答。"""
     # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT,
     # 未登录但允许匿名回退(对应原项目"未登录也可提问"的行为)
     user = resolve_user(authorization, allow_anonymous_fallback=True)
     user_text = _extract_user_text(req)
+
+    # ---- 三层限流(仅云端部署生效) ----
+    # 对应原项目 app/api/chat/route.ts 的限流检查顺序:
+    # 访客 IP → 用户总量 → adaptive 单独
+    from ryoshi.ratelimit import (
+        check_adaptive_limit,
+        check_guest_limit,
+        check_overall_chat_limit,
+    )
+
+    # 1. 访客限流(未登录时按 IP)
+    if user.is_anonymous:
+        client_ip = request.client.host if request.client else None
+        if client_ip:
+            guest_result = await check_guest_limit(client_ip)
+            if not guest_result.allowed:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": "Please sign in to continue.",
+                        "authRequired": True,
+                        "remaining": 0,
+                        "resetAt": guest_result.reset_at,
+                        "limit": guest_result.limit,
+                    },
+                    headers={
+                        "X-RateLimit-Limit": str(guest_result.limit),
+                        "X-RateLimit-Remaining": "0",
+                        "X-RateLimit-Reset": str(guest_result.reset_at),
+                    },
+                )
+
+    # 2. 用户总量限流(登录用户按 userId)
+    if not user.is_anonymous:
+        overall_result = await check_overall_chat_limit(user.id)
+        if not overall_result.allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Daily chat limit reached.",
+                    "remaining": 0,
+                    "resetAt": overall_result.reset_at,
+                    "limit": overall_result.limit,
+                },
+                headers={
+                    "X-RateLimit-Limit": str(overall_result.limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(overall_result.reset_at),
+                },
+            )
+
+    # 3. Adaptive 模式单独限流
+    if req.searchMode == "adaptive" and not user.is_anonymous:
+        adaptive_result = await check_adaptive_limit(user.id)
+        if not adaptive_result.allowed:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Daily adaptive mode limit reached.",
+                    "remaining": 0,
+                    "resetAt": adaptive_result.reset_at,
+                    "limit": adaptive_result.limit,
+                },
+                headers={
+                    "X-RateLimit-Limit": str(adaptive_result.limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(adaptive_result.reset_at),
+                },
+            )
     if not user_text.strip():
         # 空消息直接返回一个最小 SSE 流并结束,避免驱动智能体
         async def empty():
@@ -146,15 +216,14 @@ async def chat(
         # 对话轮次:新聊天为 1;否则数历史中的 user 消息条数
         conversation_turn = 1
         if not req.isNewChat and req.chatId:
-            history_user_ids = [
-                m.id
-                for m in (chat.get("messages", []) if (chat := None) else [])
-            ]
             # 简化:用 messages 数组长度估算(匿名模式前端会传 messages)
-            conversation_turn = calculate_conversation_turn(
+            history_user_ids = (
                 [m.get("id", "") for m in req.messages if m.role == "user"]
                 if req.messages
-                else [],
+                else []
+            )
+            conversation_turn = calculate_conversation_turn(
+                history_user_ids,
                 req.message.id if req.message else None,
             )
 
@@ -208,7 +277,7 @@ async def chat(
         # 先落用户消息(失败不阻塞流式,只记日志——历史缺失可容忍,回答必须送达)
         try:
             await persist_user_message()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"[ryoshi] 用户消息持久化失败: {exc}")
 
         # Langfuse trace:整个研究过程包在一个 trace 里,traceId 写入消息 metadata,
