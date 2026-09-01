@@ -305,6 +305,10 @@ async def load_chat(
 
     返回结构对齐前端 loadChat 期望:{messages, title, visibility}。
     messages 按创建时间排序,每条的 parts 按 order 排序。
+
+    所有权校验(对应原项目 loadChatWithMessages):
+    visibility='private' 的会话仅 owner 可读;visibility='public'(已分享)
+    的会话任何人可读。user_id 为 None 时视为匿名访客,仅能读 public。
     """
     # 先取消息(按时间),再按 message_id 批量取 parts(按 order),避免 N+1
     result = await session.execute(
@@ -316,7 +320,14 @@ async def load_chat(
         chat = await session.get(Chat, chat_id)
         if chat is None:
             return None
+        if chat.visibility == "private" and chat.user_id != user_id:
+            return None
         return {"messages": [], "title": chat.title, "visibility": chat.visibility}
+
+    # 有消息时再校验所有权
+    chat = await session.get(Chat, chat_id)
+    if chat is not None and chat.visibility == "private" and chat.user_id != user_id:
+        return None
 
     msg_ids = [m.id for m in messages]
     parts_result = await session.execute(
@@ -336,7 +347,6 @@ async def load_chat(
         for m in messages
     ]
 
-    chat = await session.get(Chat, chat_id)
     return {
         "messages": ui_messages,
         "title": chat.title if chat else DEFAULT_CHAT_TITLE,

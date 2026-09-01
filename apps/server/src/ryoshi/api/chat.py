@@ -10,12 +10,13 @@
     响应为 text/event-stream,帧格式严格遵循 packages/protocol/PROTOCOL.md。
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ryoshi.agents.models import ModelConfigError, default_model_id
 from ryoshi.agents.researcher import build_initial_messages, create_quick_researcher
+from ryoshi.auth import AuthUser, resolve_user
 from ryoshi.chat.frames import Error
 from ryoshi.chat.sse import SSE_HEADERS, encode_done, encode_frame
 from ryoshi.chat.stream import agent_stream_to_frames
@@ -57,8 +58,13 @@ def _extract_user_text(req: ChatRequest) -> str:
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest) -> StreamingResponse:
+async def chat(
+    req: ChatRequest, authorization: str | None = Header(None)
+) -> StreamingResponse:
     """处理一次提问并流式返回回答。"""
+    # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT,
+    # 未登录但允许匿名回退(对应原项目"未登录也可提问"的行为)
+    user = resolve_user(authorization, allow_anonymous_fallback=True)
     user_text = _extract_user_text(req)
     if not user_text.strip():
         # 空消息直接返回一个最小 SSE 流并结束,避免驱动智能体
@@ -125,7 +131,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     # ---- 持久化:先落用户消息,流结束后再落 assistant 回答 ----
     # 对应原项目 persistStreamResults:新聊天先建会话+首消息,
     # 已有聊天只追加用户消息;assistant 回答在流完整结束后落库。
-    user_id = get_settings().anonymous_user_id
+    user_id = user.id  # 来自 JWT 或匿名回退(见函数开头 resolve_user)
     chat_id = req.chatId
 
     async def persist_user_message() -> None:

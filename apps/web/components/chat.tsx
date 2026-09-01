@@ -8,6 +8,7 @@ import { DefaultChatTransport } from 'ai'
 import { toast } from 'sonner'
 
 import { CHAT_API } from '@/lib/api'
+import { getAccessToken } from '@/lib/api-client'
 import { summarizeGenui } from '@/lib/analytics/genui-summary'
 import { captureClient, getDistinctId } from '@/lib/analytics/posthog-client'
 import { ChatProvider } from '@/lib/contexts/chat-context'
@@ -143,6 +144,14 @@ export function Chat({
     id: chatId, // use the client-generated or provided chatId
     transport: new DefaultChatTransport({
       api: CHAT_API,
+      // 已登录用户的 SSE 请求携带 JWT,后端据此识别用户身份。
+      // headers 是静态对象,但 transport 每次渲染都重建,所以读到的是当前值。
+      headers: (() => {
+        const token = getAccessToken()
+        const h: Record<string, string> = {}
+        if (token) h['Authorization'] = `Bearer ${token}`
+        return h
+      })(),
       prepareSendMessagesRequest: ({ messages, trigger, messageId }) => {
         // Simplify by passing AI SDK's default trigger values directly
         const lastMessage = messages[messages.length - 1]

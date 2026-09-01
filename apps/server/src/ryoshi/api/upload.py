@@ -13,9 +13,9 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi import Form
+from fastapi import APIRouter, Form, Header, HTTPException, UploadFile
 
+from ryoshi.auth import resolve_user
 from ryoshi.config import get_settings
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -68,10 +68,12 @@ def _object_key(user_id: str, chat_id: str, filename: str) -> str:
 async def upload_file(
     file: UploadFile,
     chatId: str = Form(...),
+    authorization: str | None = Header(None),
 ):
     """接收 multipart 文件,存到对象存储,返回 {url, key, mediaType, filename}。"""
     s = get_settings()
-    user_id = s.anonymous_user_id
+    # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT
+    user_id = resolve_user(authorization, allow_anonymous_fallback=True).id
 
     if not _is_storage_configured():
         raise HTTPException(
