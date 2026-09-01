@@ -2,9 +2,11 @@
 ///
 /// 设计意图:
 ///   原为 Next Server Actions('use server'),直接操作数据库;
-///   现改为调用后端 REST API。函数签名与组件调用处保持一致,组件无需改动。
-///   阶段 3 仅聊天主流程可用,历史/分享等端点在阶段 4 由后端实现,
-///   未就绪的调用会抛 ApiError,组件按既有降级逻辑处理。
+///   现改为调用后端 REST API。**契约与原 Server Action 一致**:返回
+///   `{ success, error?, ... }` 形状,调用方(chat-menu-item、clear-history、
+///   chat-share 等)按此判定,无需改动。
+///   后端对应端点在阶段 4/任务 19-20 逐步实现;未就绪的会在 catch 分支
+///   返回 `{ success: false, error }`,组件按既有降级逻辑处理。
 
 import { apiFetch } from '@/lib/api-client'
 import type { UIMessage } from '@/lib/types/ai'
@@ -37,28 +39,68 @@ export async function loadChat(
   }
 }
 
-export async function deleteChat(chatId: string): Promise<void> {
-  return apiFetch(`/api/chats/${chatId}`, { method: 'DELETE' })
+export async function deleteChat(
+  chatId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch(`/api/chats/${chatId}`, { method: 'DELETE' })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete chat'
+    }
+  }
 }
 
-export async function clearChats(): Promise<void> {
-  return apiFetch('/api/chats', { method: 'DELETE' })
+export async function clearChats(): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    await apiFetch('/api/chats', { method: 'DELETE' })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to clear history'
+    }
+  }
 }
 
 export async function deleteMessagesAfter(
   chatId: string,
   messageId: string
-): Promise<void> {
-  return apiFetch(`/api/chats/${chatId}/messages/after/${messageId}`, {
-    method: 'DELETE'
-  })
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch(`/api/chats/${chatId}/messages/after/${messageId}`, {
+      method: 'DELETE'
+    })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to delete messages'
+    }
+  }
 }
 
-/// 分享聊天:把可见性设为 public 并返回可分享的 id
-export async function shareChat(chatId: string): Promise<string> {
-  const result = await apiFetch<{ shareId: string }>(
-    `/api/chats/${chatId}/share`,
-    { method: 'POST' }
-  )
-  return result.shareId
+/// 分享聊天:把可见性设为 public 并返回可分享的 id。
+/// 原项目返回更新后的 Chat 对象;这里对齐调用方实际需要——shareId。
+export async function shareChat(
+  chatId: string
+): Promise<{ success: boolean; shareId?: string; error?: string }> {
+  try {
+    const result = await apiFetch<{ shareId: string }>(
+      `/api/chats/${chatId}/share`,
+      { method: 'POST' }
+    )
+    return { success: true, shareId: result.shareId }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to share chat'
+    }
+  }
 }

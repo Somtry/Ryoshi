@@ -37,18 +37,16 @@ export function ChatShare({ chatId, className }: ChatShareProps) {
       setOpen(true)
     })
 
-    const sharedChatObject = await shareChat(chatId)
-    if (!sharedChatObject) {
+    const result = await shareChat(chatId)
+    if (!result.success || !result.shareId) {
       toast.error(
-        'Failed to make chat public. You may need to be logged in or own the chat.'
+        result.error ??
+          'Failed to make chat public. You may need to be logged in or own the chat.'
       )
       return
     }
 
-    const url = new URL(
-      `/search/${sharedChatObject.id}`,
-      window.location.origin
-    )
+    const url = new URL(`/search/${result.shareId}`, window.location.origin)
     setShareUrl(url.toString())
   }
 
