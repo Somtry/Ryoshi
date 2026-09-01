@@ -128,6 +128,53 @@ async def chat(
 
     messages = await build_model_messages()
 
+    # ---- PostHog 分析:仅云端部署发送;fire-and-forget,不阻塞聊天 ----
+    # 对应原项目 app/api/chat/route.ts 的 trackChatEvent 调用。
+    from ryoshi.observability.analytics import (
+        calculate_conversation_turn,
+        derive_query_shape,
+        track_chat_event,
+    )
+
+    try:
+        # distinctId: 登录用户用 user_id,匿名用前端传的 analyticsId
+        distinct_id = (
+            user.id
+            if not user.is_anonymous
+            else getattr(req, "analyticsId", None) or user.id
+        )
+        # 对话轮次:新聊天为 1;否则数历史中的 user 消息条数
+        conversation_turn = 1
+        if not req.isNewChat and req.chatId:
+            history_user_ids = [
+                m.id
+                for m in (chat.get("messages", []) if (chat := None) else [])
+            ]
+            # 简化:用 messages 数组长度估算(匿名模式前端会传 messages)
+            conversation_turn = calculate_conversation_turn(
+                [m.get("id", "") for m in req.messages if m.role == "user"]
+                if req.messages
+                else [],
+                req.message.id if req.message else None,
+            )
+
+        provider_id = model_id.split(":", 1)[0] if ":" in model_id else model_id
+        track_chat_event(
+            search_mode=req.searchMode,
+            conversation_turn=conversation_turn,
+            is_new_chat=req.isNewChat,
+            trigger="submit-message",
+            chat_id=req.chatId or "",
+            distinct_id=distinct_id,
+            is_guest=user.is_anonymous,
+            user_id=None if user.is_anonymous else user.id,
+            provider_id=provider_id,
+            model_id=model_id.split(":", 1)[1] if ":" in model_id else model_id,
+            query_shape=derive_query_shape(user_text),
+        )
+    except Exception:
+        pass  # 分析失败不影响聊天
+
     # ---- 持久化:先落用户消息,流结束后再落 assistant 回答 ----
     # 对应原项目 persistStreamResults:新聊天先建会话+首消息,
     # 已有聊天只追加用户消息;assistant 回答在流完整结束后落库。
@@ -164,17 +211,26 @@ async def chat(
         except Exception as exc:  # noqa: BLE001
             print(f"[ryoshi] 用户消息持久化失败: {exc}")
 
-        frames = agent_stream_to_frames(
-            agent,
-            messages,
-            # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
-            # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
-            message_metadata={"searchMode": req.searchMode, "modelId": model_id},
-            on_assistant_message=persist_assistant_message,
-            max_steps=max_steps,
-        )
-        async for frame in frames:
-            yield encode_frame(frame)
-        yield encode_done()
+        # Langfuse trace:整个研究过程包在一个 trace 里,traceId 写入消息 metadata,
+        # 前端反馈按钮据此关联评分(对应原项目 traceId 贯穿 researcher + title-gen)。
+        from ryoshi.observability.tracing import research_trace
+
+        async with research_trace(chat_id or "", user_id, model_id, req.searchMode) as trace_id:
+            metadata: dict = {"searchMode": req.searchMode, "modelId": model_id}
+            if trace_id:
+                metadata["traceId"] = trace_id
+
+            frames = agent_stream_to_frames(
+                agent,
+                messages,
+                # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
+                # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
+                message_metadata=metadata,
+                on_assistant_message=persist_assistant_message,
+                max_steps=max_steps,
+            )
+            async for frame in frames:
+                yield encode_frame(frame)
+            yield encode_done()
 
     return StreamingResponse(event_stream(), headers=SSE_HEADERS)
