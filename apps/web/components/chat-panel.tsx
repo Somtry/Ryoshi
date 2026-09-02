@@ -869,14 +869,17 @@ export function ChatPanel({
                           <Plus className="size-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" className="text-xs">
+                      <TooltipContent side="top" className="text-xs">
                         Add
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
 
                   {isAttachmentMenuOpen && (
-                    <div className="absolute left-0 top-full z-50 mt-2 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                    // 有消息时输入框 sticky bottom-0 贴近视口底部,菜单向下弹
+                    // (top-full) 会超出屏幕;改为向上弹(bottom-full)。
+                    // 首页无消息时输入框在视口中央,向上弹同样安全。
+                    <div className="absolute bottom-full left-0 z-50 mb-2 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
                       <button
                         type="button"
                         className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"

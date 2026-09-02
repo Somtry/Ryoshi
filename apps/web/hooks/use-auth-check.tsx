@@ -26,23 +26,9 @@ async function fetchAuthMode(): Promise<AuthMode> {
   return cachedAuthMode
 }
 
-/// 匿名模式下的伪用户:最小可用的 User 形状。
-/// 原型里匿名模式 getCurrentUserId() 返回 'anonymous-user'(真值),
-/// 于是 isGuest=false、上传/拖拽/历史落库全部可用。SPA 前端没有服务端,
-/// 用后端告知的 authMode 合成等价用户,让消费 isGuest/user 的组件无需改动。
-function makeAnonymousUser(id: string): User {
-  return {
-    id,
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-    // 标记匿名,供需要区分的地方使用(原型用 is_anonymous 同理)
-    is_anonymous: true
-  } as unknown as User
-}
-
 export function useAuthCheck() {
+  // user 只代表**真实登录用户**(Supabase session)。匿名模式下恒为 null——
+  // 没登录就是没登录,Header 据此显示 GuestMenu(对齐原型 layout.tsx 行为)。
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [authMode, setAuthMode] = useState<AuthMode>('authenticated')
@@ -52,13 +38,14 @@ export function useAuthCheck() {
     let cancelled = false
 
     const checkAuth = async () => {
-      // 先问后端认证模式:匿名模式下无论 Supabase 是否配置,都视为已登录
       const mode = await fetchAuthMode()
       if (cancelled) return
       setAuthMode(mode)
 
       if (mode === 'anonymous') {
-        setUser(makeAnonymousUser('anonymous-user'))
+        // 匿名模式:不读 Supabase,直接视为"功能上的已登录"(isGuest=false),
+        // 但 user 保持 null(没有真实账号)
+        setUser(null)
         setLoading(false)
         return
       }
@@ -94,16 +81,18 @@ export function useAuthCheck() {
     }
   }, [])
 
+  // isGuest 是功能开关,与"有没有真实账号"解耦:
+  //   - 匿名模式(ENABLE_AUTH=false): 原型 getCurrentUserId() 返回 anonymous-user
+  //     (真值),isGuest=false,上传/拖拽/历史落库全部可用
+  //   - 认证模式: 有 session → 非游客;无 session → 游客(功能受限,弹登录框)
+  const isGuest = authMode === 'anonymous' ? false : !user
+
   return {
     user,
     loading,
-    isAuthenticated: !!user,
     authMode,
-    /// libraryAvailable 的语义对齐原型:ENABLE_AUTH !== 'false'。
-    /// 匿名模式下 Library 面板对所有人开放(数据归 anonymous-user);
-    /// 认证模式下也开放(游客可浏览,保存时弹登录框)。
-    /// 原型恒为 true(ENABLE_AUTH 只影响匿名与否,不关掉 Library),
-    /// 所以这里直接恒 true——保留字段只为不改动消费方。
+    isGuest,
+    /// libraryAvailable 对齐原型:ENABLE_AUTH 只影响匿名与否,不关掉 Library。
     libraryAvailable: true
   }
 }

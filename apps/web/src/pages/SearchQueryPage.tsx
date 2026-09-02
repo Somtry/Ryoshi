@@ -18,7 +18,7 @@ import { useAuthCheck } from '@/hooks/use-auth-check'
 export default function SearchQueryPage() {
   const [searchParams] = useSearchParams()
   const q = searchParams.get('q')
-  const { user, libraryAvailable } = useAuthCheck()
+  const { isGuest, libraryAvailable } = useAuthCheck()
   const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
   // chatId 只在首次渲染生成一次(原型是每次 SSR 生成;SPA 复用组件时不能变)
   const [chatId] = useState(() => generateUUID())
@@ -37,7 +37,7 @@ export default function SearchQueryPage() {
     <Chat
       id={chatId}
       query={q}
-      isGuest={!user}
+      isGuest={isGuest}
       isCloudDeployment={false}
       libraryAvailable={libraryAvailable}
       modelSelectorData={modelSelectorData}

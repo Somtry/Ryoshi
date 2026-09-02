@@ -22,9 +22,10 @@ import { useAuthCheck } from '@/hooks/use-auth-check'
 import { UserProvider } from '@/lib/contexts/user-context'
 
 export default function AppLayout() {
-  // 当前用户。认证模式下来自 Supabase session;匿名模式(ENABLE_AUTH=false)
-  // 下由 useAuthCheck 合成 anonymous-user 伪用户,与原型行为对齐。
-  const { user, loading } = useAuthCheck()
+  // user 是真实登录用户(Supabase session),匿名模式下为 null——
+  // 没登录就是没登录,Header 据此显示 GuestMenu(对齐原型 layout.tsx)。
+  // isGuest 是功能开关:匿名模式下为 false(上传/历史等功能可用)。
+  const { user, loading, isGuest } = useAuthCheck()
   const userId = user?.id ?? null
 
   // 认证状态加载期间不渲染,避免闪烁(访客→已登录的跳变)
@@ -39,7 +40,9 @@ export default function AppLayout() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <PostHogProvider userId={userId}>
-        <UserProvider hasUser={!!userId}>
+        {/* hasUser 语义对齐原型:匿名模式下 getCurrentUserId() 返回真值,
+            有"匿名账号"数据(历史/文件),视为 hasUser=true */}
+        <UserProvider hasUser={!isGuest}>
           <SidebarProvider defaultOpen={false}>
             <LibraryProvider>
               {/* 匿名模式也渲染侧栏:历史记录按匿名用户存储,需要可见 */}
