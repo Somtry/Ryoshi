@@ -18,7 +18,7 @@ import { useAuthCheck } from '@/hooks/use-auth-check'
 
 export default function SearchPage() {
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuthCheck()
+  const { user, libraryAvailable } = useAuthCheck()
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'not-found' }
@@ -73,7 +73,7 @@ export default function SearchPage() {
       savedMessages={state.messages}
       isGuest={!user}
       isCloudDeployment={false}
-      libraryAvailable={!!user}
+      libraryAvailable={libraryAvailable}
       modelSelectorData={modelSelectorData}
     />
   )

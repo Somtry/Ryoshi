@@ -15,7 +15,7 @@ import { useAuthCheck } from '@/hooks/use-auth-check'
 
 export default function HomePage() {
   const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
-  const { user } = useAuthCheck()
+  const { user, libraryAvailable } = useAuthCheck()
 
   useEffect(() => {
     apiFetch<ModelSelectorData>('/api/models')
@@ -27,7 +27,7 @@ export default function HomePage() {
     <Chat
       isGuest={!user}
       isCloudDeployment={false}
-      libraryAvailable={!!user}
+      libraryAvailable={libraryAvailable}
       modelSelectorData={modelSelectorData}
     />
   )

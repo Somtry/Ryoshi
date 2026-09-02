@@ -68,4 +68,10 @@ async def get_models():
         "modelsByProvider": models_by_provider,
         "selectedModelKey": selected_key,
         "hasAvailableModels": bool(models_by_provider),
+        # 认证模式:前端据此区分"匿名模式"(ENABLE_AUTH=false,单用户共享
+        # anonymous-user,应视为已登录)与"未登录的访客"(需登录才能上传等)。
+        # 原型靠服务端 getCurrentUserId() 直接返回 anonymous-user 解决;
+        # SPA 前端只能问后端。
+        "authMode": "authenticated" if s.enable_auth else "anonymous",
+        "anonymousUserId": s.anonymous_user_id if not s.enable_auth else None,
     }

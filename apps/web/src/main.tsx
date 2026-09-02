@@ -17,6 +17,7 @@ import '../globals.css'
 import AppLayout from './AppLayout'
 import HomePage from './pages/HomePage'
 import SearchPage from './pages/SearchPage'
+import SearchQueryPage from './pages/SearchQueryPage'
 import AuthErrorPage from './pages/auth/AuthErrorPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { path: '/', element: <HomePage /> },
+      { path: '/search', element: <SearchQueryPage /> },
       { path: '/search/:id', element: <SearchPage /> }
     ]
   },

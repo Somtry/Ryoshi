@@ -22,7 +22,8 @@ import { useAuthCheck } from '@/hooks/use-auth-check'
 import { UserProvider } from '@/lib/contexts/user-context'
 
 export default function AppLayout() {
-  // 从 Supabase session 获取当前用户(匿名模式下 user=null)
+  // 当前用户。认证模式下来自 Supabase session;匿名模式(ENABLE_AUTH=false)
+  // 下由 useAuthCheck 合成 anonymous-user 伪用户,与原型行为对齐。
   const { user, loading } = useAuthCheck()
   const userId = user?.id ?? null
 
