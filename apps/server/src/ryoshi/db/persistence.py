@@ -263,6 +263,28 @@ async def create_chat_with_first_message(
     return chat
 
 
+async def check_chat_write_permission(
+    session: AsyncSession, chat_id: str, user_id: str
+) -> bool:
+    """校验用户是否有权向该会话写入消息。
+
+    设计意图:
+        原项目靠 Postgres RLS 在数据库层挡住越权写(upsertMessage 注释:
+        "Caller MUST ensure authorization")。我们没有 RLS,必须在应用层补:
+        分享链接(visibility='public')只读——任何人可加载历史,但只有
+        owner 能继续提问/写入。否则拿到分享链接的人就能往别人的会话里
+        追加消息(越权写)。
+
+    规则:会话不存在时放行(由调用方决定是新建还是报错);
+    存在时仅 owner(user_id 匹配)可写。匿名模式下所有会话同属匿名账号,
+    user_id 一致,不受影响。
+    """
+    chat = await session.get(Chat, chat_id)
+    if chat is None:
+        return True
+    return chat.user_id == user_id
+
+
 async def upsert_message(
     session: AsyncSession,
     chat_id: str,
@@ -272,6 +294,9 @@ async def upsert_message(
 
     AI 回答在流式结束后落库;若同一 message.id 已有记录(如重试),
     先删旧 parts 再按最新内容重建,保证与最终流式结果一致。
+
+    注意:本函数不做所有权校验(与原项目一致,见 upsertMessage 注释)。
+    调用方必须先经 check_chat_write_permission 校验,防止分享链接越权写。
     """
     message_id = message.get("id") or generate_id()
 

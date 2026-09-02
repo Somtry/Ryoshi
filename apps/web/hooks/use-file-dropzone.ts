@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 
 import { toast } from 'sonner'
 
+import { getAccessToken } from '@/lib/api-client'
 import { UploadedFile } from '@/lib/types'
 
 type UseFileDropzoneProps = {
@@ -69,9 +70,14 @@ export function useFileDropzone({
           formData.append('chatId', chatId)
 
           try {
+            // FormData 不能走 apiFetch(会强制 JSON Content-Type 破坏 boundary),
+            // 手动附加 Authorization 头,登录用户上传的文件才能归属其账号
+            const token = getAccessToken()
             const res = await fetch('/api/upload', {
               method: 'POST',
-              body: formData
+              body: formData,
+              credentials: 'include',
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined
             })
 
             if (!res.ok) throw new Error('Upload failed')

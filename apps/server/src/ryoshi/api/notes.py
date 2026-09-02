@@ -128,15 +128,15 @@ async def list_notes(
     has_more = len(notes) > limit
     notes = notes[:limit]
 
+    # nextCursor 直接返回对象:前端会自行 JSON.stringify 后放入下次请求的
+    # cursor 参数;若这里先 json.dumps,前端再 stringify 一次就双重编码了。
     next_cursor = None
     if has_more and notes:
         last = notes[-1]
-        next_cursor = json.dumps(
-            {
-                "updatedAt": last.updated_at.isoformat() if last.updated_at else "",
-                "id": last.id,
-            }
-        )
+        next_cursor = {
+            "updatedAt": last.updated_at.isoformat() if last.updated_at else "",
+            "id": last.id,
+        }
 
     return {
         "success": True,

@@ -20,6 +20,7 @@ import SearchPage from './pages/SearchPage'
 import AuthErrorPage from './pages/auth/AuthErrorPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
+import OAuthCallbackPage from './pages/auth/OAuthCallbackPage'
 import SignUpPage from './pages/auth/SignUpPage'
 import SignUpSuccessPage from './pages/auth/SignUpSuccessPage'
 import UpdatePasswordPage from './pages/auth/UpdatePasswordPage'
@@ -41,6 +42,12 @@ const router = createBrowserRouter([
   {
     path: '/auth/sign-up',
     element: <SignUpPage />
+  },
+  {
+    // Google OAuth 回调:Supabase 重定向回这里,code 换 session 由
+    // supabase-js 的 detectSessionInUrl 自动完成(对应原型 auth/oauth/route.ts)
+    path: '/auth/oauth',
+    element: <OAuthCallbackPage />
   },
   {
     path: '/auth/sign-up-success',

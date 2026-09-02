@@ -210,6 +210,21 @@ async def chat(
 
         return StreamingResponse(empty(), headers=SSE_HEADERS)
 
+    # ---- 会话写权限校验(防分享链接越权写) ----
+    # 对应原项目两处防御的应用层等价物:分享页禁聊(route.ts 403)+ RLS。
+    # visibility='public' 的会话任何人可读,但只有 owner 能继续提问;
+    # 否则拿到分享链接的人就能往别人会话里追加消息。
+    if not req.isNewChat and req.chatId:
+        from ryoshi.db.persistence import check_chat_write_permission
+
+        async with get_session_factory()() as session:
+            allowed = await check_chat_write_permission(session, req.chatId, user.id)
+        if not allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "You do not have permission to write to this chat."},
+            )
+
     # 模型选择:优先用前端 cookie 中的选择,无效则回退默认模型
     # 对应原项目 lib/utils/model-selection.ts 的 cookie 读取逻辑
     try:

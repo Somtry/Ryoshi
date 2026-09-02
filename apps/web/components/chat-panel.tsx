@@ -26,6 +26,7 @@ import {
 import { toast } from 'sonner'
 
 import { captureClient } from '@/lib/analytics/posthog-client'
+import { getAccessToken } from '@/lib/api-client'
 import { SHORTCUT_EVENTS } from '@/lib/keyboard-shortcuts'
 import {
   isAdaptiveModeAuthBlocked,
@@ -305,9 +306,14 @@ export function ChatPanel({
           formData.append('file', uf.file)
           formData.append('chatId', chatId)
           try {
+            // FormData 不走 apiFetch(会强制 JSON Content-Type 破坏 boundary),
+            // 手动附加 Authorization 头,登录用户上传的文件才能归属其账号
+            const token = getAccessToken()
             const res = await fetch('/api/upload', {
               method: 'POST',
-              body: formData
+              body: formData,
+              credentials: 'include',
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined
             })
 
             if (!res.ok) {
