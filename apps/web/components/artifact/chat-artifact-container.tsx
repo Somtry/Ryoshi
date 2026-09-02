@@ -138,7 +138,8 @@ export function ChatArtifactContainer({
   return (
     <div className="flex-1 min-h-0 min-w-0 h-full flex">
       <div className="absolute z-50 p-4 transition-opacity duration-[180ms] ease-[var(--motion-ease-out)]">
-        {hasUser && (!open || isMobileSidebar) && (
+        {/* 匿名模式也显示侧栏触发器:历史记录按匿名用户落库,需要可访问 */}
+        {(!open || isMobileSidebar) && (
           <SidebarTrigger className="animate-fade-in" />
         )}
       </div>
