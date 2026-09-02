@@ -4,22 +4,38 @@
     原项目在 Next.js 服务端用 @supabase/ssr 的 createServerClient + getUser()
     校验——本质是向 Supabase API 发一次请求验证 token 有效性。
     Ryoshi 后端是常驻 Python 服务,每次请求都调一次 Supabase API 会成为瓶颈;
-    改用 python-jose 本地校验 JWT 签名(Supabase 用 HS256 + 项目级 JWT secret
-    签发,secret 即"项目设置 → API → JWT Secret"),验证通过后直接从 payload
-    取 sub(用户 id),零网络开销。
+    改为本地校验 JWT 签名,验证通过后直接从 payload 取 sub(用户 id),零网络开销。
+
+    签名密钥两种形态(取决于 Supabase 项目的 JWT Keys 配置):
+      1. 新版 ECC(P-256,算法 ES256)非对称签名——从 JWKS 端点拉公钥校验,
+         私钥不离开 Supabase,且能自动跟上 key 轮换。这是 Supabase 现行默认。
+      2. 旧版 HS256 共享密钥(JWT Secret)——本地用同一 secret 校验。
+
+    校验策略:优先 JWKS(配置了 SUPABASE_URL 即可,无需额外密钥);
+    未配置 URL 但配了 SUPABASE_JWT_SECRET 时回退 HS256(兼容老项目/自建)。
 
     匿名模式(ENABLE_AUTH=false)完全保留:所有请求共享 ANONYMOUS_USER_ID,
     与原项目 getCurrentUserId 的行为对齐。
 """
 
 import logging
+import time
 from dataclasses import dataclass
 
+import httpx
 from jose import JWTError, jwt
+from jose.exceptions import JWKError
 
 from ryoshi.config import get_settings
 
 logger = logging.getLogger("ryoshi.auth")
+
+# JWKS 公钥缓存:{"keys": [...], "fetched_at": 时间戳}
+# 模块级缓存,进程内共享;避免每个请求都打一次 Supabase。
+_jwks_cache: dict = {}
+# 缓存有效期。Supabase 的 key 轮换会先发 standby 再切换,公钥端点会同时
+# 返回新旧 key,所以缓存几小时是安全的;遇到未知 kid 也会主动刷新(见下)。
+_JWKS_TTL_SECONDS = 3600
 
 
 @dataclass(frozen=True)
@@ -44,23 +60,108 @@ def _extract_bearer_token(authorization: str | None) -> str:
     return token
 
 
+def _jwks_url(supabase_url: str) -> str:
+    """Supabase 的 JWKS 公钥端点(对应 JS 客户端校验 token 用的同一套公钥)。"""
+    return f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+
+def _fetch_jwks(supabase_url: str, *, force_refresh: bool = False) -> list[dict]:
+    """拉取 JWKS 公钥列表,带 TTL 缓存。失败抛 AuthError。"""
+    now = time.time()
+    if (
+        not force_refresh
+        and _jwks_cache.get("keys") is not None
+        and now - _jwks_cache.get("fetched_at", 0) < _JWKS_TTL_SECONDS
+    ):
+        return _jwks_cache["keys"]
+
+    url = _jwks_url(supabase_url)
+    try:
+        resp = httpx.get(url, timeout=10.0)
+        resp.raise_for_status()
+        keys = resp.json().get("keys", [])
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise AuthError(f"无法从 Supabase 拉取 JWKS 公钥: {exc}") from exc
+
+    if not keys:
+        raise AuthError("Supabase JWKS 端点未返回任何公钥")
+
+    _jwks_cache["keys"] = keys
+    _jwks_cache["fetched_at"] = now
+    return keys
+
+
+def _find_key_for_token(token: str, keys: list[dict]) -> dict | None:
+    """按 token header 里的 kid 在 JWKS 列表中找匹配的公钥。"""
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError:
+        return None
+    kid = header.get("kid")
+    if not kid:
+        # 无 kid 时,若只有一个 key 就用它(常见于单 key 项目)
+        return keys[0] if len(keys) == 1 else None
+    for k in keys:
+        if k.get("kid") == kid:
+            return k
+    return None
+
+
 def verify_jwt(token: str) -> AuthUser:
     """本地校验 Supabase JWT,返回认证用户。
 
     Supabase JWT 约定:
-      - 算法 HS256,签名密钥即项目的 JWT Secret(不是 publishable key)
+      - 算法 ES256(新版 ECC 项目)或 HS256(旧版共享密钥项目)
       - payload.sub = 用户 UUID
       - payload.aud = "authenticated"(登录用户)或 "anon"(匿名 key 签发)
       - payload.exp = 过期时间戳
     """
     s = get_settings()
-    if not s.supabase_jwt_secret:
-        raise AuthError("后端未配置 SUPABASE_JWT_SECRET,无法校验 token")
+
+    # 路径 1:JWKS 公钥校验(新版 ECC 项目,配 SUPABASE_URL 即可)
+    if s.supabase_url:
+        return _verify_via_jwks(token, s.supabase_url)
+
+    # 路径 2:HS256 共享密钥回退(旧版项目/自建 Supabase)
+    if s.supabase_jwt_secret:
+        return _verify_via_secret(token, s.supabase_jwt_secret)
+
+    raise AuthError("后端未配置 SUPABASE_URL(用于 JWKS)或 SUPABASE_JWT_SECRET")
+
+
+def _verify_via_jwks(token: str, supabase_url: str) -> AuthUser:
+    """用 JWKS 公钥校验(ES256/ECC)。未知 kid 会强制刷新一次公钥再试。"""
+    keys = _fetch_jwks(supabase_url)
+    key = _find_key_for_token(token, keys)
+
+    if key is None:
+        # kid 不在缓存里:可能是 Supabase 轮换了 key,强制刷新再试一次
+        keys = _fetch_jwks(supabase_url, force_refresh=True)
+        key = _find_key_for_token(token, keys)
+        if key is None:
+            raise AuthError("JWKS 中找不到与 token kid 匹配的公钥")
 
     try:
         payload = jwt.decode(
             token,
-            s.supabase_jwt_secret,
+            key,
+            # JWKS 公钥可能对应多种算法,按 key 的 kty/alg 限定;
+            # Supabase ECC 项目用 ES256
+            algorithms=["ES256", "RS256"],
+            options={"verify_aud": False},
+        )
+    except (JWTError, JWKError) as exc:
+        raise AuthError(f"JWT 校验失败: {exc}") from exc
+
+    return _user_from_payload(payload)
+
+
+def _verify_via_secret(token: str, secret: str) -> AuthUser:
+    """用 HS256 共享密钥校验(旧版项目)。"""
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
             algorithms=["HS256"],
             # Supabase 的 aud 是 "authenticated" 或 "anon";不强制校验 aud,
             # 因为 anon key 签发的 token 也是合法的(未登录但有匿名会话的场景)
@@ -69,10 +170,14 @@ def verify_jwt(token: str) -> AuthUser:
     except JWTError as exc:
         raise AuthError(f"JWT 校验失败: {exc}") from exc
 
+    return _user_from_payload(payload)
+
+
+def _user_from_payload(payload: dict) -> AuthUser:
+    """从 JWT payload 提取用户 id。"""
     user_id = payload.get("sub")
     if not user_id or not isinstance(user_id, str):
         raise AuthError("JWT payload 缺少 sub 字段")
-
     return AuthUser(id=user_id, is_anonymous=False)
 
 
