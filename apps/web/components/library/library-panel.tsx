@@ -69,11 +69,12 @@ type DeleteTarget =
 
 function formatNoteDate(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value)
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat('zh-CN', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: false
   }).format(date)
 }
 
@@ -82,7 +83,7 @@ function getExcerpt(content: string) {
 }
 
 function formatBytes(value: number | null) {
-  if (!value) return 'Unknown size'
+  if (!value) return '未知大小'
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
   return `${(value / 1024 / 1024).toFixed(1)} MB`
@@ -114,7 +115,7 @@ function LibraryItemActionsMenu({
           size="icon"
           className="size-7 shrink-0 text-muted-foreground"
           onClick={event => event.stopPropagation()}
-          aria-label="Note actions"
+          aria-label="更多操作"
         >
           <MoreHorizontal className="size-4" />
         </Button>
@@ -220,7 +221,7 @@ export function LibraryPanel() {
           reason: loadReason,
           error: result.error ?? 'unknown'
         })
-        toast.error(result.error ?? 'Failed to load library')
+        toast.error(result.error ?? '加载知识库失败')
         return
       }
 
@@ -273,7 +274,7 @@ export function LibraryPanel() {
           reason: loadReason,
           error: result.error ?? 'unknown'
         })
-        toast.error(result.error ?? 'Failed to load files')
+        toast.error(result.error ?? '加载文件失败')
         return
       }
 
@@ -325,7 +326,7 @@ export function LibraryPanel() {
                   reason: 'load_more',
                   error: result.error ?? 'unknown'
                 })
-                toast.error(result.error ?? 'Failed to load library')
+                toast.error(result.error ?? '加载知识库失败')
                 return
               }
 
@@ -355,7 +356,7 @@ export function LibraryPanel() {
                   reason: 'load_more',
                   error: result.error ?? 'unknown'
                 })
-                toast.error(result.error ?? 'Failed to load files')
+                toast.error(result.error ?? '加载文件失败')
                 return
               }
 
@@ -450,10 +451,10 @@ export function LibraryPanel() {
         : isLoading || isFilesLoading
   const emptyMessage =
     activeTab === 'notes'
-      ? 'No notes yet.'
+      ? '还没有笔记。'
       : activeTab === 'files'
-        ? 'No files yet.'
-        : 'No library items yet.'
+        ? '还没有文件。'
+        : '知识库还是空的。'
   const selectedTitle = useMemo(
     () =>
       selectedNote
@@ -554,7 +555,7 @@ export function LibraryPanel() {
             reason: result.error ?? 'unknown'
           }
         )
-        toast.error(result.error ?? 'Failed to delete item')
+        toast.error(result.error ?? '删除失败')
         return
       }
 
@@ -563,7 +564,7 @@ export function LibraryPanel() {
         { itemId: target.item.id }
       )
       toast.success(
-        target.kind === 'note' ? 'Note deleted' : 'File removed from Library'
+        target.kind === 'note' ? '笔记已删除' : '文件已从知识库移除'
       )
       if (target.kind === 'note' && selectedNote?.id === target.item.id) {
         setSelectedNote(null)
@@ -598,21 +599,21 @@ export function LibraryPanel() {
                       setSelectedNote(null)
                       setSelectedFile(null)
                     }}
-                    aria-label="Back to library"
-                    tooltipContent="Back"
+                    aria-label="返回知识库"
+                    tooltipContent="返回"
                   >
                     <ArrowLeft className="size-4" />
                   </TooltipButton>
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-medium">
-                      {selectedTitle || 'Untitled item'}
+                      {selectedTitle || '未命名'}
                     </h3>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {selectedNote && (
                     <LibraryItemActionsMenu
-                      deleteLabel="Delete Note"
+                      deleteLabel="删除笔记"
                       onDelete={() =>
                         handleRequestDeleteNote(selectedNote, 'library_detail')
                       }
@@ -620,7 +621,7 @@ export function LibraryPanel() {
                   )}
                   {selectedFile && (
                     <LibraryItemActionsMenu
-                      deleteLabel="Remove from Library"
+                      deleteLabel="从知识库移除"
                       onDelete={() =>
                         handleRequestDeleteFile(selectedFile, 'library_detail')
                       }
@@ -630,8 +631,8 @@ export function LibraryPanel() {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleCloseLibrary('detail_header')}
-                    aria-label="Close panel"
-                    tooltipContent="Close"
+                    aria-label="关闭面板"
+                    tooltipContent="关闭"
                   >
                     <X className="size-4" />
                   </TooltipButton>
@@ -643,14 +644,14 @@ export function LibraryPanel() {
                   <div className="flex items-center gap-2 rounded-md p-2">
                     <LibraryIcon size={18} />
                   </div>
-                  <span className="truncate text-sm font-medium">Library</span>
+                  <span className="truncate text-sm font-medium">知识库</span>
                 </h3>
                 <TooltipButton
                   variant="ghost"
                   size="icon"
                   onClick={() => handleCloseLibrary('panel_header')}
-                  aria-label="Close panel"
-                  tooltipContent="Close"
+                  aria-label="关闭面板"
+                  tooltipContent="关闭"
                 >
                   <X className="size-4" />
                 </TooltipButton>
@@ -668,7 +669,7 @@ export function LibraryPanel() {
                 <MarkdownMessage message={selectedNote.content} />
               </article>
               <footer className="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground">
-                Saved {formatNoteDate(selectedNote.createdAt)}
+                保存于 {formatNoteDate(selectedNote.createdAt)}
               </footer>
             </div>
           ) : selectedFile ? (
@@ -691,27 +692,27 @@ export function LibraryPanel() {
                 )}
                 <div className="mt-4 space-y-3 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground">Filename</p>
+                    <p className="text-xs text-muted-foreground">文件名</p>
                     <p className="break-words font-medium">
                       {selectedFile.filename}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <p className="text-muted-foreground">Type</p>
+                      <p className="text-muted-foreground">类型</p>
                       <p className="mt-0.5 break-words">
                         {selectedFile.mediaType}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Size</p>
+                      <p className="text-muted-foreground">大小</p>
                       <p className="mt-0.5">{formatBytes(selectedFile.size)}</p>
                     </div>
                   </div>
                 </div>
               </div>
               <footer className="shrink-0 border-t px-4 py-2 text-xs text-muted-foreground">
-                Added {formatNoteDate(selectedFile.createdAt)}
+                添加于 {formatNoteDate(selectedFile.createdAt)}
               </footer>
             </div>
           ) : (
@@ -727,13 +728,13 @@ export function LibraryPanel() {
                     type="button"
                     size="sm"
                     variant={activeTab === tab ? 'secondary' : 'ghost'}
-                    className="h-7 rounded-md px-2 text-xs capitalize"
+                    className="h-7 rounded-md px-2 text-xs"
                     onClick={() => {
                       setActiveTab(tab)
                       captureClient('library_tab_selected', { tab })
                     }}
                   >
-                    {tab}
+                    {tab === 'all' ? '全部' : tab === 'notes' ? '笔记' : '文件'}
                   </Button>
                 ))}
               </div>
@@ -786,7 +787,7 @@ export function LibraryPanel() {
 
                     const note = libraryItem.item
                     const title =
-                      stripMarkdownTitle(note.title) || 'Untitled note'
+                      stripMarkdownTitle(note.title) || '无标题笔记'
                     return (
                       <div
                         key={`note-${note.id}`}
@@ -812,7 +813,7 @@ export function LibraryPanel() {
                         </button>
                         <div className="absolute right-1 top-1.5 opacity-100 md:opacity-0 md:transition-opacity md:group-hover/note:opacity-100">
                           <LibraryItemActionsMenu
-                            deleteLabel="Delete Note"
+                            deleteLabel="删除笔记"
                             onDelete={() =>
                               handleRequestDeleteNote(note, 'library_list')
                             }
@@ -848,17 +849,17 @@ export function LibraryPanel() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {deleteTarget?.kind === 'file'
-                ? 'Remove this file from Library?'
-                : `Delete this ${deleteTarget?.kind ?? 'item'}?`}
+                ? '将此文件从知识库移除？'
+                : '删除这条笔记？'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget?.kind === 'file'
-                ? 'This removes the file from Library. Existing chat history and stored attachments are not deleted.'
-                : 'This action cannot be undone. The saved item will be permanently removed from your library.'}
+                ? '只会将文件从知识库移除，已有的对话记录和附件不受影响。'
+                : '此操作无法撤销，该笔记将从知识库中永久删除。'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={isDeleting}
               onClick={event => {
@@ -872,9 +873,9 @@ export function LibraryPanel() {
                   <Spinner />
                 </div>
               ) : deleteTarget?.kind === 'file' ? (
-                'Remove'
+                '移除'
               ) : (
-                'Delete'
+                '删除'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

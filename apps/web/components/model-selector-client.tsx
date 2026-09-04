@@ -101,7 +101,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
         variant="outline"
         className="h-auto gap-1 rounded-full border-none bg-muted px-3 py-2 text-sm shadow-none transition-[background-color,color,box-shadow,transform]"
         disabled
-        title="No enabled models are available"
+        title="当前没有可用的模型"
       >
         <span className="truncate max-w-52 text-xs font-medium">
           No enabled model available
@@ -137,7 +137,7 @@ export function ModelSelectorClient({ data }: ModelSelectorClientProps) {
       </PopoverTrigger>
       <PopoverContent className="w-[300px] p-0" align="end" sideOffset={6}>
         <Command>
-          <CommandInput placeholder="Search models..." />
+          <CommandInput placeholder="搜索模型…" />
           <CommandList>
             <CommandEmpty>No model found.</CommandEmpty>
             {providerEntries.map(([provider, models]) => (

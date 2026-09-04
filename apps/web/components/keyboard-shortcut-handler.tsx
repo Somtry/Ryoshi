@@ -19,8 +19,8 @@ const THEME_CYCLE: Record<string, string> = {
 }
 
 const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
-  quick: 'Quick',
-  adaptive: 'Adaptive'
+  quick: '快速',
+  adaptive: '深入'
 }
 
 export function KeyboardShortcutHandler() {
@@ -49,7 +49,7 @@ export function KeyboardShortcutHandler() {
     const current = getCookie('searchMode') || 'quick'
     const next: SearchMode = current === 'quick' ? 'adaptive' : 'quick'
     setCookie('searchMode', next)
-    toast.info(`Search mode: ${SEARCH_MODE_LABELS[next]}`)
+    toast.info(`搜索模式：${SEARCH_MODE_LABELS[next]}`)
   })
 
   useKeyboardShortcut(SHORTCUTS.showShortcuts, () => {

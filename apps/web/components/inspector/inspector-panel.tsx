@@ -33,22 +33,22 @@ export function InspectorPanel() {
       case 'tool-todoWrite':
         return {
           icon: <ListTodo size={18} />,
-          title: 'Todo List'
+          title: '任务清单'
         }
       case 'reasoning':
         return {
           icon: <LightbulbIcon size={18} />,
-          title: 'Thoughts'
+          title: '思考过程'
         }
       case 'text':
         return {
           icon: <MessageSquare size={18} />,
-          title: 'Text'
+          title: '文本'
         }
       default:
         return {
           icon: <MessageSquare size={18} />,
-          title: 'Content'
+          title: '内容'
         }
     }
   }

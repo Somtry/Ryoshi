@@ -131,7 +131,7 @@ export function QuestionConfirmation({
   const updatedQuery = () => {
     // If skipped, show skipped message
     if (wasSkipped()) {
-      return 'Question skipped'
+      return '已跳过该问题'
     }
 
     const displayOptions = getDisplayedOptions()

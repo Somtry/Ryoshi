@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
               size="sm"
               onClick={() => setFeedbackOpen(true)}
             >
-              Feedback
+              反馈
             </Button>
           )}
           {user && (
@@ -66,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({ user }) => {
               }}
             >
               <LibraryIcon className="size-4" />
-              Library
+              知识库
             </Button>
           )}
           {user ? <UserMenu user={user} /> : <GuestMenu />}

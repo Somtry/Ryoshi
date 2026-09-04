@@ -17,15 +17,15 @@ export function ThemeMenuItems() {
     <>
       <DropdownMenuItem onClick={() => setTheme('light')}>
         <Sun className="size-4" />
-        <span>Light</span>
+        <span>浅色</span>
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => setTheme('dark')}>
         <Moon className="size-4" />
-        <span>Dark</span>
+        <span>深色</span>
       </DropdownMenuItem>
       <DropdownMenuItem onClick={() => setTheme('system')}>
         <Laptop className="size-4" />
-        <span>System</span>
+        <span>跟随系统</span>
       </DropdownMenuItem>
     </>
   )

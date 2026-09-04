@@ -30,21 +30,21 @@ export default function GuestMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="size-6">
           <Settings2 className="size-4" />
-          <span className="sr-only">Open menu</span>
+          <span className="sr-only">打开菜单</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuItem asChild>
           <Link href="/auth/login">
             <LogIn className="size-4" />
-            <span>Sign In</span>
+            <span>登录</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Palette className="size-4" />
-            <span>Theme</span>
+            <span>主题</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <ThemeMenuItems />
@@ -53,7 +53,7 @@ export default function GuestMenu() {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Link2 className="size-4" />
-            <span>Links</span>
+            <span>快捷链接</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <ExternalLinkItems />

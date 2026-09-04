@@ -26,18 +26,18 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
             <IconLogo className="size-14" />
           </div>
           <DialogTitle className="text-xl font-semibold">
-            Continue with Ryoshi
+            继续使用 Ryoshi
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            To use Ryoshi, sign in to your account or create a new one.
+            登录你的账号或注册新账号，即可使用 Ryoshi。
           </DialogDescription>
         </DialogHeader>
         <div className="mt-6 space-y-3">
           <Button asChild className="w-full" size="lg">
-            <Link href="/auth/sign-up">Sign Up</Link>
+            <Link href="/auth/sign-up">注册</Link>
           </Button>
           <Button asChild variant="outline" className="w-full" size="lg">
-            <Link href="/auth/login">Sign In</Link>
+            <Link href="/auth/login">登录</Link>
           </Button>
         </div>
       </DialogContent>

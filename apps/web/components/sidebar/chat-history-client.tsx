@@ -39,7 +39,7 @@ export function ChatHistoryClient() {
       setNextOffset(newNextOffset)
     } catch (error) {
       console.error('Failed to load initial chats:', error)
-      toast.error('Failed to load chat history.')
+      toast.error('加载对话记录失败。')
       setNextOffset(null)
     } finally {
       setIsLoading(false)
@@ -74,7 +74,7 @@ export function ChatHistoryClient() {
       setNextOffset(newNextOffset)
     } catch (error) {
       console.error('Failed to load more chats:', error)
-      toast.error('Failed to load more chat history.')
+      toast.error('加载更多对话记录失败。')
       setNextOffset(null)
     } finally {
       setIsLoading(false)
@@ -109,14 +109,14 @@ export function ChatHistoryClient() {
     <div className="flex flex-col flex-1 h-full">
       <SidebarGroup>
         <div className="flex items-center justify-between w-full">
-          <SidebarGroupLabel className="p-0">History</SidebarGroupLabel>
+          <SidebarGroupLabel className="p-0">历史记录</SidebarGroupLabel>
           <ClearHistoryAction empty={isHistoryEmpty} />
         </div>
       </SidebarGroup>
       <div className="flex-1 overflow-y-auto mb-2 relative">
         {isHistoryEmpty && !isPending ? (
           <div className="px-2 text-foreground/30 text-sm text-center py-4">
-            No search history
+            暂无对话记录
           </div>
         ) : (
           <SidebarMenu>

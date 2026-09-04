@@ -41,28 +41,28 @@ export const Section: React.FC<SectionProps> = ({
   let icon: React.ReactNode
   let type: 'text' | 'badge' = 'text'
   switch (title) {
-    case 'Images':
+    case '图片':
       // eslint-disable-next-line jsx-a11y/alt-text
       icon = <Image size={iconSize} className={iconClassName} />
       break
-    case 'Videos':
+    case '视频':
       icon = <Film size={iconSize} className={iconClassName} />
       type = 'badge'
       break
-    case 'Sources':
+    case '来源':
       icon = <FileText size={iconSize} className={iconClassName} />
       type = 'badge'
       break
-    case 'Answer':
+    case '回答':
       icon = <BookCheck size={iconSize} className={iconClassName} />
       break
-    case 'Related':
+    case '相关问题':
       icon = <Repeat2 size={iconSize} className={iconClassName} />
       break
-    case 'Follow-up':
+    case '追问':
       icon = <MessageCircleMore size={iconSize} className={iconClassName} />
       break
-    case 'Content':
+    case '内容':
       icon = <File size={iconSize} className={iconClassName} />
       type = 'badge'
       break
@@ -121,7 +121,7 @@ export function ToolArgsSection({
       {number && number > 0 && (
         <div className="shrink-0">
           <StatusIndicator icon={Check} iconClassName="text-green-500">
-            {number} results
+            {number} 条结果
           </StatusIndicator>
         </div>
       )}

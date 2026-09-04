@@ -50,7 +50,7 @@ export function MessageNavigationDots({
                   type="button"
                   className="group flex size-3 items-center justify-center"
                   onClick={() => handleClick(section.id)}
-                  aria-label={preview || 'Go to message'}
+                  aria-label={preview || '跳转到该消息'}
                 >
                   <span className="size-1.5 rounded-full bg-foreground/30 transition-colors group-hover:bg-foreground/60" />
                 </button>

@@ -43,9 +43,9 @@ export function KeyboardShortcutDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Keyboard Shortcuts</DialogTitle>
+          <DialogTitle>键盘快捷键</DialogTitle>
           <DialogDescription className="sr-only">
-            List of available keyboard shortcuts
+            可用的键盘快捷键列表
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1">

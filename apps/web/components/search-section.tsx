@@ -58,7 +58,7 @@ export function SearchSection({
 
   const isError = tool.state === 'output-error'
   const errorMessage = toPublicErrorPayload(tool.errorText, {
-    fallbackMessage: 'Search failed'
+    fallbackMessage: '搜索失败'
   }).error
   const query = tool.input?.query || output?.query || ''
   const includeDomains = tool.input?.include_domains
@@ -89,7 +89,7 @@ export function SearchSection({
         searchResults && totalResults > 0 ? (
           <div className="flex items-center gap-2">
             <StatusIndicator icon={Check} iconClassName="text-green-500">
-              {totalResults} results
+              {totalResults} 条结果
             </StatusIndicator>
             {searchResults.results && searchResults.results.length > 0 && (
               <SourceFavicons results={searchResults.results} maxDisplay={3} />
@@ -158,7 +158,7 @@ export function SearchSection({
             {searchResults &&
               searchResults.videos &&
               searchResults.videos.length > 0 && (
-                <Section title="Videos">
+                <Section title="视频">
                   <VideoSearchResults
                     results={createVideoSearchResults(searchResults, query)}
                   />
@@ -177,7 +177,7 @@ export function SearchSection({
             ) : (isLoading && isToolLoading) || isSearching ? (
               <SearchSkeleton />
             ) : searchResults?.results && searchResults.results.length > 0 ? (
-              <Section title="Sources">
+              <Section title="来源">
                 <SearchResults results={searchResults.results} />
               </Section>
             ) : null}

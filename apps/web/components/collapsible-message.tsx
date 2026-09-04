@@ -119,7 +119,7 @@ export function CollapsibleMessage({
                       (variant === 'process' || variant === 'process-sub') &&
                         'p-0.5'
                     )}
-                    aria-label={isOpen ? 'Collapse' : 'Expand'}
+                    aria-label={isOpen ? '收起' : '展开'}
                   >
                     <ChevronDown
                       className={cn(
@@ -135,7 +135,7 @@ export function CollapsibleMessage({
                   <button
                     type="button"
                     className="p-1 hover:bg-accent rounded-md transition-transform duration-200 group"
-                    aria-label={isOpen ? 'Collapse' : 'Expand'}
+                    aria-label={isOpen ? '收起' : '展开'}
                   >
                     <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </button>

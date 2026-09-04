@@ -37,23 +37,34 @@ export function SignUpForm({
     setError(null)
 
     if (password !== repeatPassword) {
-      setError('Passwords do not match')
+      setError('两次输入的密码不一致')
       setIsLoading(false)
       return
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`
+          // 确认邮件里的链接会跳到 /auth/oauth,由该页面处理 token 并自动登录
+          emailRedirectTo: `${window.location.origin}/auth/oauth`
         }
       })
       if (error) throw error
-      router.push('/auth/sign-up-success')
+
+      // 如果 Supabase 关闭了邮箱确认(Confirm email = false),
+      // signUp 会直接返回有效 session(用户已自动登录)。
+      // 此时直接跳回首页,而不是跳到"查收邮件"页。
+      if (data.session) {
+        router.push('/')
+        router.refresh()
+      } else {
+        // 仍需邮箱确认时才跳成功提示页
+        router.push('/auth/sign-up-success')
+      }
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred')
+      setError(error instanceof Error ? error.message : '发生未知错误')
     } finally {
       setIsLoading(false)
     }
@@ -68,17 +79,17 @@ export function SignUpForm({
         <CardHeader className="text-center">
           <CardTitle className="text-2xl flex flex-col items-center justify-center gap-4">
             <IconLogo className="size-12" />
-            Create an account
+            注册账号
           </CardTitle>
           <CardDescription>
-            Enter your details below to get started
+            填写以下信息即可开始使用
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">邮箱</Label>
                 <Input
                   id="email"
                   type="email"
@@ -90,7 +101,7 @@ export function SignUpForm({
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">密码</Label>
                 </div>
                 <PasswordInput
                   id="password"
@@ -103,7 +114,7 @@ export function SignUpForm({
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
+                  <Label htmlFor="repeat-password">确认密码</Label>
                 </div>
                 <PasswordInput
                   id="repeat-password"
@@ -116,13 +127,13 @@ export function SignUpForm({
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Creating account...' : 'Sign Up'}
+                {isLoading ? '正在创建账号…' : '注册'}
               </Button>
             </div>
             <div className="mt-6 text-center text-sm">
-              Already have an account?{' '}
+              已有账号？{' '}
               <Link href="/auth/login" className="underline underline-offset-4">
-                Sign In
+                直接登录
               </Link>
             </div>
           </form>
@@ -130,7 +141,7 @@ export function SignUpForm({
       </Card>
       <div className="text-center text-xs text-muted-foreground">
         <Link href="/" className="hover:underline">
-          &larr; Back to Home
+          &larr; 返回首页
         </Link>
       </div>
     </div>

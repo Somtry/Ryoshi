@@ -340,7 +340,7 @@ export function ChatPanel({
               )
             )
           } catch (e) {
-            toast.error(`Failed to upload ${uf.file.name}`)
+            toast.error(`上传 ${uf.file.name} 失败`)
             setUploadedFiles(prev =>
               prev.map(f =>
                 f.file === uf.file ? { ...f, status: 'error' } : f
@@ -362,7 +362,7 @@ export function ChatPanel({
       setNoteContexts(prev =>
         prev.some(item => item.id === note.id) ? prev : [...prev, note]
       )
-      toast.success('Note attached')
+      toast.success('笔记已附加')
       return true
     },
     [setNoteContexts]
@@ -385,7 +385,7 @@ export function ChatPanel({
           ? prev
           : [...prev, file]
       )
-      toast.success('File attached')
+      toast.success('文件已附加')
       return true
     },
     [setUploadedFiles]
@@ -447,7 +447,7 @@ export function ChatPanel({
         <div className="mb-6 md:mb-10 flex flex-col items-center gap-2 md:gap-4">
           <IconBlinkingLogo className="size-12" />
           <h1 className="text-xl md:text-2xl font-medium text-foreground">
-            What would you like to know?
+            你想知道什么？
           </h1>
         </div>
       )}
@@ -472,7 +472,7 @@ export function ChatPanel({
               return
             }
             if (!hasAvailableModels) {
-              toast.error('No enabled model is available')
+              toast.error('当前没有可用的模型')
               return
             }
             const uploaded = uploadedFiles.filter(f => f.status === 'uploaded')
@@ -496,7 +496,7 @@ export function ChatPanel({
               ...uploaded.map(f => ({
                 type: 'file',
                 url: f.url!,
-                filename: f.name ?? f.file?.name ?? 'Attached file',
+                filename: f.name ?? f.file?.name ?? '附件',
                 mediaType:
                   f.mediaType ?? f.file?.type ?? 'application/octet-stream',
                 key: f.key
@@ -550,7 +550,7 @@ export function ChatPanel({
 
           if (!hasAvailableModels) {
             e.preventDefault()
-            toast.error('No enabled model is available')
+            toast.error('当前没有可用的模型')
             return
           }
           handleSubmit(e)
@@ -576,7 +576,7 @@ export function ChatPanel({
               size="icon"
               className="absolute -top-10 right-0 z-20 size-8 rounded-full shadow-md"
               onClick={handleScrollToBottom}
-              title="Scroll to bottom"
+              title="回到底部"
             >
               <ChevronDown size={16} />
             </Button>
@@ -696,7 +696,7 @@ export function ChatPanel({
                     <span className="flex items-center gap-1.5 truncate text-xs font-medium text-muted-foreground">
                       <FileText className="size-3.5 shrink-0" />
                       <span className="truncate">
-                        Note: {stripMarkdownText(note.title) || 'Untitled note'}
+                        笔记：{stripMarkdownText(note.title) || '无标题笔记'}
                       </span>
                     </span>
                     <button
@@ -764,7 +764,7 @@ export function ChatPanel({
             onCompositionEnd={handleCompositionEnd}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
-            placeholder={messages.length > 0 ? 'Reply...' : 'Ask anything...'}
+            placeholder={messages.length > 0 ? '继续提问…' : '想问什么？'}
             spellCheck={false}
             value={input}
             disabled={isLoading || isToolInvocationInProgress()}
@@ -870,7 +870,7 @@ export function ChatPanel({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">
-                        Add
+                        添加
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -889,7 +889,7 @@ export function ChatPanel({
                         }}
                       >
                         <Paperclip className="size-4" />
-                        Upload file
+                        上传文件
                       </button>
                       <button
                         type="button"
@@ -897,7 +897,7 @@ export function ChatPanel({
                         onClick={openLibraryPicker}
                       >
                         <LibraryIcon className="size-4" />
-                        Add from library
+                        从知识库添加
                       </button>
                     </div>
                   )}
@@ -938,7 +938,7 @@ export function ChatPanel({
                 title={
                   hasAvailableModels
                     ? undefined
-                    : 'No enabled model is available'
+                    : '当前没有可用的模型'
                 }
               >
                 {isLoading ? (

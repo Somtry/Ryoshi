@@ -21,8 +21,8 @@ export function InspectorDrawer() {
 
   // Function to get the title based on part type (mirrors ArtifactPanel logic)
   const getTitle = () => {
-    if (libraryOpen) return 'Library'
-    if (!part) return 'Artifact' // Default title
+    if (libraryOpen) return '知识库'
+    if (!part) return '详情' // Default title
     switch (part.type) {
       case 'tool-search':
         return 'search'
@@ -31,11 +31,11 @@ export function InspectorDrawer() {
       case 'tool-askQuestion':
         return 'askQuestion'
       case 'reasoning':
-        return 'Thoughts'
+        return '思考过程'
       case 'text':
-        return 'Text'
+        return '文本'
       default:
-        return 'Content'
+        return '内容'
     }
   }
 

@@ -209,7 +209,7 @@ export function AnswerSection({
           chatId,
           reason: result.error ?? 'unknown'
         })
-        toast.error(result.error ?? 'Failed to save note')
+        toast.error(result.error ?? '保存笔记失败')
         return
       }
 
@@ -221,9 +221,9 @@ export function AnswerSection({
         chatId,
         chars: selection.text.length
       })
-      toast.success('Saved to library', {
+      toast.success('已保存到知识库', {
         action: {
-          label: 'Open',
+          label: '打开',
           onClick: () => {
             openLibrary()
             captureClient('library_opened', { source: 'toast' })
@@ -239,7 +239,7 @@ export function AnswerSection({
         chatId,
         reason: 'exception'
       })
-      toast.error('Failed to save note')
+      toast.error('保存笔记失败')
     } finally {
       setIsSavingSelection(false)
     }

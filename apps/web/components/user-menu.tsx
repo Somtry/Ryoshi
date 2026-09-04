@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 
 import type { User } from '@supabase/supabase-js'
 import {
+  IconKey as Key,
   IconLink as Link2,
   IconLogout as LogOut,
   IconUserCircle as UserRound
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { AccountSettingsDialog } from '@/components/account-settings-dialog'
+import { ApiKeysDialog } from '@/components/api-keys-dialog'
 
 import { Button } from './ui/button'
 import { ExternalLinkItems } from './external-link-items'
@@ -38,6 +40,7 @@ export default function UserMenu({ user }: UserMenuProps) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [apiKeysOpen, setApiKeysOpen] = useState(false)
   const userName =
     user.user_metadata?.full_name || user.user_metadata?.name || 'User'
   const avatarUrl =
@@ -101,12 +104,22 @@ export default function UserMenu({ user }: UserMenuProps) {
             }}
           >
             <UserRound className="size-4" />
-            <span>Account</span>
+            <span>账户</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={event => {
+              event.preventDefault()
+              setMenuOpen(false)
+              window.setTimeout(() => setApiKeysOpen(true), 0)
+            }}
+          >
+            <Key className="size-4" />
+            <span>API Keys</span>
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <Link2 className="size-4" />
-              <span>Links</span>
+              <span>快捷链接</span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <ExternalLinkItems />
@@ -115,7 +128,7 @@ export default function UserMenu({ user }: UserMenuProps) {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout}>
             <LogOut className="size-4" />
-            <span>Logout</span>
+            <span>退出登录</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -124,6 +137,7 @@ export default function UserMenu({ user }: UserMenuProps) {
         onOpenChange={setAccountOpen}
         user={user}
       />
+      <ApiKeysDialog open={apiKeysOpen} onOpenChange={setApiKeysOpen} />
     </>
   )
 }

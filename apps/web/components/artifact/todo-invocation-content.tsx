@@ -16,7 +16,7 @@ export function TodoInvocationContent({ part }: TodoInvocationContentProps) {
   if (part.state === 'output-error') {
     return (
       <TodoListContent
-        errorText={part.errorText || 'Failed to process todos'}
+        errorText={part.errorText || '任务处理失败'}
       />
     )
   }

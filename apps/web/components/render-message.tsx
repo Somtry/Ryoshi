@@ -81,7 +81,7 @@ export function RenderMessage({
           <UserFileSection
             key={`${messageId}-user-file-${index}`}
             file={{
-              name: part.filename || 'Unknown file',
+              name: part.filename || '未知文件',
               url: part.url,
               contentType: part.mediaType
             }}

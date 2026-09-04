@@ -47,7 +47,7 @@ export function LoginForm({
       router.push('/')
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred')
+      setError(error instanceof Error ? error.message : '发生未知错误')
     } finally {
       setIsLoading(false)
     }
@@ -68,7 +68,7 @@ export function LoginForm({
       if (error) throw error
     } catch (error: unknown) {
       setError(
-        error instanceof Error ? error.message : 'An OAuth error occurred'
+        error instanceof Error ? error.message : '第三方登录出错'
       )
     } finally {
       setIsLoading(false)
@@ -84,9 +84,9 @@ export function LoginForm({
         <CardHeader className="text-center">
           <CardTitle className="text-2xl flex flex-col items-center justify-center gap-4">
             <IconLogo className="size-12" />
-            Welcome back
+            欢迎回来
           </CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <CardDescription>登录你的账号</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
@@ -97,7 +97,7 @@ export function LoginForm({
               onClick={handleSocialLogin}
               disabled={isLoading}
             >
-              Sign In with Google
+              使用 Google 登录
             </Button>
 
             <div className="relative my-2">
@@ -105,13 +105,13 @@ export function LoginForm({
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-muted px-2 text-muted-foreground">Or</span>
+                <span className="bg-muted px-2 text-muted-foreground">或</span>
               </div>
             </div>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">邮箱</Label>
                 <Input
                   id="email"
                   type="email"
@@ -123,12 +123,12 @@ export function LoginForm({
               </div>
               <div className="grid gap-2">
                 <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">密码</Label>
                   <Link
                     href="/auth/forgot-password"
                     className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
                   >
-                    Forgot password?
+                    忘记密码？
                   </Link>
                 </div>
                 <PasswordInput
@@ -142,21 +142,21 @@ export function LoginForm({
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Logging in...' : 'Sign In'}
+                {isLoading ? '登录中…' : '登录'}
               </Button>
             </form>
           </div>
           <div className="mt-6 text-center text-sm">
-            Don&apos;t have an account?{' '}
+            还没有账号？{' '}
             <Link href="/auth/sign-up" className="underline underline-offset-4">
-              Sign Up
+              立即注册
             </Link>
           </div>
         </CardContent>
       </Card>
       <div className="text-center text-xs text-muted-foreground">
         <Link href="/" className="hover:underline">
-          &larr; Back to Home
+          &larr; 返回首页
         </Link>
       </div>
     </div>

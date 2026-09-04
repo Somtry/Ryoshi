@@ -35,7 +35,7 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={url}
-                  alt={att.name ?? 'Attachment'}
+                  alt={att.name ?? '附件'}
                   className="size-full object-contain"
                 />
               </div>

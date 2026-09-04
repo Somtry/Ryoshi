@@ -48,10 +48,10 @@ const formatDateWithTime = (date: Date | string) => {
   yesterday.setDate(yesterday.getDate() - 1)
 
   const formatTime = (date: Date) => {
-    return date.toLocaleString('en-US', {
+    return date.toLocaleString('zh-CN', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: false
     })
   }
 
@@ -60,21 +60,21 @@ const formatDateWithTime = (date: Date | string) => {
     parsedDate.getMonth() === now.getMonth() &&
     parsedDate.getFullYear() === now.getFullYear()
   ) {
-    return `Today, ${formatTime(parsedDate)}`
+    return `今天 ${formatTime(parsedDate)}`
   } else if (
     parsedDate.getDate() === yesterday.getDate() &&
     parsedDate.getMonth() === yesterday.getMonth() &&
     parsedDate.getFullYear() === yesterday.getFullYear()
   ) {
-    return `Yesterday, ${formatTime(parsedDate)}`
+    return `昨天 ${formatTime(parsedDate)}`
   } else {
-    return parsedDate.toLocaleString('en-US', {
+    return parsedDate.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: false
     })
   }
 }
@@ -98,7 +98,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
       const result = await deleteChat(chat.id)
 
       if (result?.success) {
-        toast.success('Chat deleted')
+        toast.success('对话已删除')
         if (isActive) {
           router.push('/')
         }
@@ -106,7 +106,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
       } else if (result?.error) {
         toast.error(result.error)
       } else {
-        toast.error('An unexpected error occurred while deleting the chat.')
+        toast.error('删除对话时出现意外错误。')
       }
     })
   }, [chat.id, isActive, router, startTransition])
@@ -148,7 +148,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
             }}
           >
             <Trash2 size={14} />
-            Delete Chat
+            删除对话
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -156,14 +156,13 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
       <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>确定要删除吗？</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete this
-              chat history.
+              此操作无法撤销，该对话记录将被永久删除。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
               onClick={event => {
@@ -177,7 +176,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
                   <Spinner />
                 </div>
               ) : (
-                'Delete'
+                '删除'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

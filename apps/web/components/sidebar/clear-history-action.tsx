@@ -45,7 +45,7 @@ export function ClearHistoryAction({ empty }: ClearHistoryActionProps) {
     startTransition(async () => {
       const res = await clearChats()
       if (res?.success) {
-        toast.success('History cleared')
+        toast.success('历史记录已清空')
         router.push('/')
       } else if (res?.error) {
         toast.error(res.error)
@@ -95,20 +95,19 @@ export function ClearHistoryAction({ empty }: ClearHistoryActionProps) {
                 event.preventDefault()
               }}
             >
-              <Trash2 size={14} /> Clear History
+              <Trash2 size={14} /> 清空历史记录
             </DropdownMenuItem>
           </AlertDialogTrigger>
 
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogTitle>确定要清空吗？</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. It will permanently delete your
-                history.
+                此操作无法撤销，将永久删除你的全部历史记录。
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={isPending}>取消</AlertDialogCancel>
               <AlertDialogAction
                 disabled={isPending}
                 onClick={event => {
@@ -116,7 +115,7 @@ export function ClearHistoryAction({ empty }: ClearHistoryActionProps) {
                   handleClearAction()
                 }}
               >
-                {isPending ? <Spinner /> : 'Clear'}
+                {isPending ? <Spinner /> : '清空'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

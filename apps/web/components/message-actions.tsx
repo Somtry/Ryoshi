@@ -89,7 +89,7 @@ export function MessageActions({
 
   async function handleCopy() {
     await navigator.clipboard.writeText(stripSpecBlocks(mappedMessage))
-    toast.success('Message copied to clipboard')
+    toast.success('已复制到剪贴板')
   }
 
   async function handleSaveNote() {
@@ -127,7 +127,7 @@ export function MessageActions({
           chatId,
           reason: result.error ?? 'unknown'
         })
-        toast.error(result.error ?? 'Failed to save note')
+        toast.error(result.error ?? '保存笔记失败')
         return
       }
 
@@ -139,9 +139,9 @@ export function MessageActions({
         chatId,
         chars: content.length
       })
-      toast.success('Saved to library', {
+      toast.success('已保存到知识库', {
         action: {
-          label: 'Open',
+          label: '打开',
           onClick: () => {
             openLibrary()
             captureClient('library_opened', { source: 'toast' })
@@ -155,7 +155,7 @@ export function MessageActions({
         chatId,
         reason: 'exception'
       })
-      toast.error('Failed to save note')
+      toast.error('保存笔记失败')
     } finally {
       setIsSavingNote(false)
     }
@@ -181,8 +181,8 @@ export function MessageActions({
       setFeedbackScore(score)
       toast.success(
         score === 1
-          ? 'Thanks for the feedback!'
-          : 'Thanks for letting us know!'
+          ? '感谢你的好评！'
+          : '感谢反馈，我们会继续改进！'
       )
     } catch (error) {
       captureClient('feedback_failed', {
@@ -192,7 +192,7 @@ export function MessageActions({
         reason: 'exception'
       })
       console.error('Error submitting feedback:', error)
-      toast.error('Failed to submit feedback')
+      toast.error('反馈提交失败')
     } finally {
       setIsSubmittingFeedback(false)
     }
@@ -264,7 +264,7 @@ export function MessageActions({
             aria-label="Save to library"
           >
             <Bookmark size={14} />
-            Save
+            保存
           </Button>
         ) : (
           <div />
@@ -278,11 +278,10 @@ export function MessageActions({
               <Bookmark className="size-6 text-muted-foreground" />
             </div>
             <DialogTitle className="text-center text-xl font-semibold">
-              Save notes to your library
+              保存笔记到知识库
             </DialogTitle>
             <DialogDescription className="text-center text-muted-foreground">
-              Sign in or create an account to save answers and selected text to
-              your Library.
+              登录或注册账号后，即可把回答和选中的文本保存到你的知识库。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2">
@@ -297,7 +296,7 @@ export function MessageActions({
                   })
                 }
               >
-                Sign Up
+                注册
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full">
@@ -311,7 +310,7 @@ export function MessageActions({
                   })
                 }
               >
-                Sign In
+                登录
               </Link>
             </Button>
           </DialogFooter>

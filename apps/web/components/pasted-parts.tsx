@@ -12,7 +12,7 @@ import {
 // legacy `<user-content>` block in old messages).
 export function PastedContentCard({
   text,
-  label = 'Pasted content'
+  label = '粘贴的内容'
 }: {
   text: string
   label?: string

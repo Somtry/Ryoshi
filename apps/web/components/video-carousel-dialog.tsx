@@ -75,7 +75,7 @@ export function VideoCarouselDialog({
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-3xl max-h-[80vh] overflow-auto">
         <DialogHeader>
-          <DialogTitle>Search Videos</DialogTitle>
+          <DialogTitle>搜索视频</DialogTitle>
           <DialogDescription className="text-sm">{query}</DialogDescription>
         </DialogHeader>
         <div className="py-4">

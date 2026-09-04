@@ -47,9 +47,9 @@ export function DynamicToolDisplay({ part }: DynamicToolDisplayProps) {
     if (toolName.startsWith('mcp__')) {
       return 'MCP Tool'
     } else if (toolName.startsWith('dynamic__')) {
-      return 'Dynamic Tool'
+      return '动态工具'
     }
-    return 'Custom Tool'
+    return '自定义工具'
   }
 
   // Extract display name from tool name
@@ -67,7 +67,7 @@ export function DynamicToolDisplay({ part }: DynamicToolDisplayProps) {
   const errorMessage =
     part.state === 'output-error'
       ? toPublicErrorPayload(part.errorText, {
-          fallbackMessage: 'Tool execution failed'
+          fallbackMessage: '工具执行失败'
         }).error
       : undefined
 
@@ -130,14 +130,14 @@ export function DynamicToolDisplay({ part }: DynamicToolDisplayProps) {
         />
         <span className="text-xs text-muted-foreground">
           {part.state === 'input-streaming'
-            ? 'Streaming...'
+            ? '生成中…'
             : part.state === 'input-available'
-              ? 'Processing...'
+              ? '处理中…'
               : part.state === 'output-available'
-                ? 'Complete'
+                ? '已完成'
                 : part.state === 'output-error'
-                  ? 'Failed'
-                  : 'Unknown'}
+                  ? '失败'
+                  : '未知'}
         </span>
       </div>
     </div>

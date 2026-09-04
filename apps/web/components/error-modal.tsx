@@ -57,13 +57,13 @@ export function ErrorModal({
   const getErrorTitle = () => {
     switch (error.type) {
       case 'rate-limit':
-        return 'Rate Limit Exceeded'
+        return '请求次数超限'
       case 'auth':
-        return 'Continue with Ryoshi'
+        return '继续使用 Ryoshi'
       case 'forbidden':
-        return 'Access Denied'
+        return '无权访问'
       default:
-        return 'Error Occurred'
+        return '出错了'
     }
   }
 
@@ -72,25 +72,25 @@ export function ErrorModal({
       case 'rate-limit':
         return (
           error.message ||
-          'You have made too many requests. Please wait a moment before trying again.'
+          '请求太频繁了，请稍等片刻再试。'
         )
       case 'auth':
         return (
           error.message ||
-          'To use Ryoshi, sign in to your account or create a new one.'
+          '登录你的账号或注册新账号，即可使用 Ryoshi。'
         )
       case 'forbidden':
-        return 'You do not have permission to access this resource.'
+        return '你没有权限访问该资源。'
       default:
         return (
-          error.message || 'An unexpected error occurred. Please try again.'
+          error.message || '发生了意外错误，请重试。'
         )
     }
   }
 
   const getErrorDetails = () => {
     if (error.type === 'rate-limit') {
-      return error.details || 'The limit resets at midnight UTC.'
+      return error.details || '额度将在 UTC 零点重置。'
     }
     return error.details
   }
@@ -127,10 +127,10 @@ export function ErrorModal({
           {error.type === 'auth' ? (
             <>
               <Button asChild className="w-full">
-                <Link href="/auth/sign-up">Sign Up</Link>
+                <Link href="/auth/sign-up">注册</Link>
               </Button>
               <Button asChild variant="outline" className="w-full">
-                <Link href="/auth/login">Sign In</Link>
+                <Link href="/auth/login">登录</Link>
               </Button>
             </>
           ) : (
@@ -144,7 +144,7 @@ export function ErrorModal({
                   className="w-full"
                 >
                   <RefreshCw className="mr-2 size-4" />
-                  Try Again
+                  重试
                 </Button>
               )}
               <Button
@@ -154,7 +154,7 @@ export function ErrorModal({
                 onClick={() => onOpenChange(false)}
                 className="w-full"
               >
-                {error.type === 'rate-limit' ? 'Understood' : 'Close'}
+                {error.type === 'rate-limit' ? '知道了' : '关闭'}
               </Button>
             </>
           )}

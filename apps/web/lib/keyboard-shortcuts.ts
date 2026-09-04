@@ -14,35 +14,35 @@ export const SHORTCUTS = {
     key: 'b',
     meta: true,
     shift: false,
-    description: 'Toggle sidebar'
+    description: '打开 / 收起侧边栏'
   },
   newChat: {
     id: 'newChat',
     key: 'o',
     meta: true,
     shift: true,
-    description: 'New chat'
+    description: '新对话'
   },
   toggleTheme: {
     id: 'toggleTheme',
     key: 'd',
     meta: true,
     shift: true,
-    description: 'Cycle theme'
+    description: '切换主题'
   },
   copyMessage: {
     id: 'copyMessage',
     key: 'c',
     meta: true,
     shift: true,
-    description: 'Copy latest assistant message'
+    description: '复制最新一条回答'
   },
   toggleSearchMode: {
     id: 'toggleSearchMode',
     key: 'm',
     meta: true,
     shift: true,
-    description: 'Toggle search mode'
+    description: '切换搜索模式'
   },
   showShortcuts: {
     id: 'showShortcuts',
@@ -50,7 +50,7 @@ export const SHORTCUTS = {
     meta: true,
     shift: false,
     ignoreShift: true,
-    description: 'Show keyboard shortcuts'
+    description: '显示键盘快捷键'
   }
 } as const satisfies Record<string, ShortcutDefinition>
 

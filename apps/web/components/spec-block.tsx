@@ -34,7 +34,7 @@ export function SpecBlock({ result }: SpecBlockProps) {
         // frozen closure (ActionProvider stores handlers as
         // useState(initialHandlers)) still sees the latest value.
         if (chatContext.isStreamingRef.current) {
-          toast.info('Please wait for the current response to finish.')
+          toast.info('请等待当前回答完成。')
           return
         }
 

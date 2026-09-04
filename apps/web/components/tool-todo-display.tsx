@@ -61,7 +61,7 @@ export function ToolTodoDisplay({
   const errorMessage =
     state === 'output-error'
       ? toPublicErrorPayload(errorText ?? output?.message, {
-          fallbackMessage: 'Todo tool failed'
+          fallbackMessage: '任务工具执行失败'
         }).error
       : undefined
 
@@ -88,8 +88,8 @@ export function ToolTodoDisplay({
           <ListTodo className="size-4 text-muted-foreground shrink-0" />
           <span className="truncate">
             {state === 'output-available' && output
-              ? output.message || 'Updated tasks'
-              : 'Updating tasks...'}
+              ? output.message || '任务已更新'
+              : '正在更新任务…'}
           </span>
         </span>
       }

@@ -36,7 +36,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
   const handleSubmit = () => {
     if (!sentiment || !message.trim()) {
-      toast.error('Please select your sentiment and write a message')
+      toast.error('请先选择感受并填写反馈内容')
       return
     }
 
@@ -48,13 +48,13 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       })
 
       if (result.success) {
-        toast.success('Thank you for your feedback!')
+        toast.success('感谢你的反馈！')
         // Reset form and close modal
         setSentiment(null)
         setMessage('')
         onOpenChange(false)
       } else {
-        toast.error('Failed to submit feedback. Please try again later.')
+        toast.error('反馈提交失败，请稍后再试。')
       }
     })
   }
@@ -69,9 +69,9 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
-          <DialogTitle>Give feedback</DialogTitle>
+          <DialogTitle>提交反馈</DialogTitle>
           <DialogDescription>
-            Your feedback helps us improve Ryoshi. Let us know what you think!
+            你的反馈能帮助我们改进 Ryoshi，欢迎告诉我们你的想法！
           </DialogDescription>
         </DialogHeader>
 
@@ -116,7 +116,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
           </div>
 
           <Textarea
-            placeholder="Your feedback"
+            placeholder="写下你的反馈…"
             value={message}
             onChange={e => setMessage(e.target.value)}
             className="min-h-[150px] resize-none"
@@ -129,14 +129,14 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               onClick={handleCancel}
               disabled={isPending}
             >
-              Cancel
+              取消
             </Button>
             <Button
               type="button"
               onClick={handleSubmit}
               disabled={isPending || !sentiment || !message.trim()}
             >
-              {isPending ? 'Submitting...' : 'Submit'}
+              {isPending ? '提交中…' : '提交'}
             </Button>
           </div>
         </div>

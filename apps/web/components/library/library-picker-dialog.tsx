@@ -178,10 +178,10 @@ export function LibraryPickerDialog({
       setIsLoading(false)
 
       if (!notesResult.success) {
-        toast.error(notesResult.error ?? 'Failed to load notes')
+        toast.error(notesResult.error ?? '加载笔记失败')
       }
       if (!filesResult.success) {
-        toast.error(filesResult.error ?? 'Failed to load files')
+        toast.error(filesResult.error ?? '加载文件失败')
       }
 
       if (needsNotesFetch) {
@@ -237,8 +237,8 @@ export function LibraryPickerDialog({
 
   const empty = notes.length === 0 && files.length === 0
   const heading = useMemo(() => {
-    if (query.trim()) return 'Search results'
-    return 'Recent library items'
+    if (query.trim()) return '搜索结果'
+    return '最近的知识库内容'
   }, [query])
 
   function handleAttachNote(note: Note) {
@@ -278,26 +278,26 @@ export function LibraryPickerDialog({
             type="button"
             size="sm"
             variant={filter === value ? 'secondary' : 'ghost'}
-            className="h-7 rounded-md px-2 text-xs capitalize"
+            className="h-7 rounded-md px-2 text-xs"
             onClick={() => setFilter(value)}
           >
-            {value}
+            {value === 'all' ? '全部' : value === 'notes' ? '笔记' : '文件'}
           </Button>
         ))}
       </div>
       <CommandInput
         value={query}
         onValueChange={setQuery}
-        placeholder="Search notes and files..."
+        placeholder="搜索笔记和文件…"
       />
       <CommandList className="h-[420px] max-h-[calc(100vh-14rem)]">
         {isLoading && (
           <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
-            <Spinner /> Loading library
+            <Spinner /> 正在加载知识库
           </div>
         )}
         {!isLoading && empty && (
-          <CommandEmpty>No library items found.</CommandEmpty>
+          <CommandEmpty>没有找到相关内容。</CommandEmpty>
         )}
         {!isLoading && !empty && (
           <CommandGroup heading={heading}>
@@ -310,14 +310,14 @@ export function LibraryPickerDialog({
                 <FileText className="size-4 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    {stripMarkdownText(note.title) || 'Untitled note'}
+                    {stripMarkdownText(note.title) || '无标题笔记'}
                   </p>
                   <p className="line-clamp-1 text-xs text-muted-foreground">
                     {stripMarkdownText(note.content)}
                   </p>
                 </div>
                 <span className="shrink-0 text-[11px] text-muted-foreground">
-                  Note
+                  笔记
                 </span>
               </CommandItem>
             ))}
@@ -339,7 +339,7 @@ export function LibraryPickerDialog({
                     </p>
                   </div>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
-                    File
+                    文件
                   </span>
                 </CommandItem>
               )

@@ -46,9 +46,9 @@ interface AccountSettingsDialogProps {
 }
 
 const themeOptions = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Laptop }
+  { value: 'light', label: '浅色', icon: Sun },
+  { value: 'dark', label: '深色', icon: Moon },
+  { value: 'system', label: '跟随系统', icon: Laptop }
 ]
 
 export function AccountSettingsDialog({
@@ -76,7 +76,7 @@ export function AccountSettingsDialog({
           console.error('Failed to clear client session:', error)
         }
 
-        toast.success('Account deleted')
+        toast.success('账号已注销')
         setConfirmOpen(false)
         onOpenChange(false)
         router.push('/')
@@ -84,7 +84,7 @@ export function AccountSettingsDialog({
         return
       }
 
-      toast.error(result.error ?? 'Failed to delete account')
+      toast.error(result.error ?? '注销账号失败')
     })
   }
 
@@ -102,16 +102,16 @@ export function AccountSettingsDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Account</DialogTitle>
+          <DialogTitle>账户</DialogTitle>
           <DialogDescription>
-            Manage your account preferences and data.
+            管理你的账号偏好和数据。
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6">
           <section className="grid gap-3">
             <div className="grid gap-1">
-              <h3 className="text-sm font-medium">Profile</h3>
+              <h3 className="text-sm font-medium">个人资料</h3>
               <div className="text-sm text-muted-foreground">
                 <p className="truncate">{userName}</p>
                 <p className="truncate">{user.email}</p>
@@ -123,9 +123,9 @@ export function AccountSettingsDialog({
 
           <section className="grid gap-3">
             <div className="grid gap-1">
-              <h3 className="text-sm font-medium">Theme</h3>
+              <h3 className="text-sm font-medium">主题外观</h3>
               <p className="text-sm text-muted-foreground">
-                Choose how Ryoshi appears on this device.
+                选择 Ryoshi 在这台设备上的外观。
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -155,11 +155,10 @@ export function AccountSettingsDialog({
           <section className="grid gap-3">
             <div className="grid gap-1">
               <h3 className="text-sm font-medium text-destructive">
-                Delete account
+                注销账号
               </h3>
               <p className="text-sm text-muted-foreground">
-                Permanently delete your account, chat history, and uploaded
-                files. This action cannot be undone.
+                永久删除你的账号、对话记录和已上传的文件，此操作无法撤销。
               </p>
             </div>
 
@@ -179,20 +178,19 @@ export function AccountSettingsDialog({
                   disabled={isDeleting}
                 >
                   <Trash2 className="size-4" />
-                  Delete account
+                  注销账号
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogTitle>确定要注销账号吗？</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action cannot be undone. Your account, chat history,
-                    and uploaded files will be permanently deleted.
+                    此操作无法撤销，你的账号、对话记录和已上传的文件都将被永久删除。
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={isDeleting}>
-                    Cancel
+                    取消
                   </AlertDialogCancel>
                   <AlertDialogAction
                     disabled={isDeleting}
@@ -202,7 +200,7 @@ export function AccountSettingsDialog({
                     }}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {isDeleting ? <Spinner /> : 'Delete account'}
+                    {isDeleting ? <Spinner /> : '确认注销'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

@@ -16,6 +16,7 @@ import {
   parseModelSelectionCookie
 } from '@/lib/config/model-selection-cookie'
 import { ChatProvider } from '@/lib/contexts/chat-context'
+import { NEW_CHAT_EVENT } from '@/lib/events'
 import { generateId } from '@/lib/db/schema'
 import {
   getPublicRateLimitDetails,
@@ -78,7 +79,8 @@ export function Chat({
   const [chatId, setChatId] = useState(() => providedId || generateId())
 
   // Callback to reset chat state when user clicks "New" button
-  const handleNewChat = () => {
+  // 用 useCallback 确保引用稳定,供 useEffect 依赖
+  const handleNewChat = useCallback(() => {
     const newId = generateId()
     setChatId(newId)
     // Clear other chat-related state that persists due to Next.js 16 component caching
@@ -91,7 +93,7 @@ export function Chat({
       type: 'general',
       message: ''
     })
-  }
+  }, [])
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -342,7 +344,7 @@ export function Chat({
       )
       const lastAssistant = assistantMessages[assistantMessages.length - 1]
       if (!lastAssistant) {
-        toast.info('No assistant message to copy')
+        toast.info('没有可复制的回答')
         return
       }
       const text =
@@ -355,8 +357,8 @@ export function Chat({
 
       if (text) {
         navigator.clipboard.writeText(stripSpecBlocks(text)).then(
-          () => toast.success('Message copied to clipboard'),
-          () => toast.error('Failed to copy message')
+          () => toast.success('已复制到剪贴板'),
+          () => toast.error('复制失败')
         )
       }
     }
@@ -374,6 +376,19 @@ export function Chat({
       })
     )
   }, [messages.length])
+
+  // Listen for "New Chat" event from sidebar
+  useEffect(() => {
+    const handleNewChatEvent = () => {
+      handleNewChat()
+      // 如果不在首页,跳回首页(确保 UI 一致)
+      if (window.location.pathname !== '/') {
+        router.push('/')
+      }
+    }
+    window.addEventListener(NEW_CHAT_EVENT, handleNewChatEvent)
+    return () => window.removeEventListener(NEW_CHAT_EVENT, handleNewChatEvent)
+  }, [handleNewChat, router])
 
   // Detect if scroll container is at the bottom
   useEffect(() => {
@@ -438,7 +453,7 @@ export function Chat({
     newContentText: string
   ) => {
     if (!chatId) {
-      toast.error('Chat ID is missing.')
+      toast.error('缺少对话 ID。')
       console.error('handleUpdateAndReloadMessage: chatId is undefined.')
       return
     }
@@ -479,7 +494,7 @@ export function Chat({
 
   const handleReloadFrom = async (reloadFromFollowerMessageId: string) => {
     if (!chatId) {
-      toast.error('Chat ID is missing for reload.')
+      toast.error('重新生成失败：缺少对话 ID。')
       return
     }
 

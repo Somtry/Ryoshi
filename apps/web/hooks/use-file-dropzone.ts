@@ -52,7 +52,7 @@ export function useFileDropzone({
 
       const total = uploadedFiles.length + allowed.length
       if (total > maxFiles) {
-        toast.error(`You can upload a maximum of ${maxFiles} files.`)
+        toast.error(`最多只能上传 ${maxFiles} 个文件。`)
         return
       }
 
@@ -100,7 +100,7 @@ export function useFileDropzone({
               )
             )
           } catch (err) {
-            toast.error(`Failed to upload ${uf.file?.name ?? 'file'}`)
+            toast.error(`上传 ${uf.file?.name ?? '文件'} 失败`)
             setUploadedFiles(prev =>
               prev.map(f =>
                 f.file === uf.file ? { ...f, status: 'error' } : f

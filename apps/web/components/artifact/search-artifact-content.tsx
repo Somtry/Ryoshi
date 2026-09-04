@@ -50,7 +50,7 @@ export function SearchArtifactContent({ tool }: { tool: ToolPart<'search'> }) {
       )}
 
       {searchResults.videos && searchResults.videos.length > 0 && (
-        <Section title="Videos">
+        <Section title="视频">
           <VideoSearchResults
             results={createVideoSearchResults(searchResults, query)}
             displayMode="artifact"
@@ -59,7 +59,7 @@ export function SearchArtifactContent({ tool }: { tool: ToolPart<'search'> }) {
       )}
 
       {searchResults.results && searchResults.results.length > 0 && (
-        <Section title="Sources">
+        <Section title="来源">
           <SearchResults results={searchResults.results} displayMode="list" />
         </Section>
       )}

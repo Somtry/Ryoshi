@@ -54,7 +54,7 @@ export function FetchSection({
   if (tool.state === 'output-error') {
     displayStatus = 'error'
     error = toPublicErrorPayload(tool.errorText, {
-      fallbackMessage: 'Failed to retrieve content'
+      fallbackMessage: '内容获取失败'
     }).error
   } else if (!output || isFetching) {
     displayStatus = 'fetching'
@@ -67,14 +67,14 @@ export function FetchSection({
       contentLength = data.results[0].content?.length
     } else {
       displayStatus = 'error'
-      error = 'No content retrieved'
+      error = '未获取到内容'
     }
   }
 
   // Get page title for display
   const getPageTitle = () => {
     if (title) return title
-    if (!url) return 'Unknown URL'
+    if (!url) return '未知链接'
     try {
       const domain = new URL(url).hostname
       return domain.replace('www.', '')

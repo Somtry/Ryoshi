@@ -48,7 +48,7 @@ export function ToolSection({
                 : {
                     declined: true,
                     skipped: response?.skipped,
-                    message: 'User declined this question'
+                    message: '用户跳过了该问题'
                   }
             })
           }}

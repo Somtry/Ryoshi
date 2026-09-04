@@ -61,7 +61,7 @@ export function FileUploadButton({
         'relative rounded-full',
         isDragging && 'ring-2 ring-blue-500 ring-offset-2'
       )}
-      title="Drag and drop or click to upload"
+      title="拖拽文件到此处，或点击上传"
     >
       <input
         ref={inputRef}

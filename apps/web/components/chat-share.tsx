@@ -41,7 +41,7 @@ export function ChatShare({ chatId, className }: ChatShareProps) {
     if (!result.success || !result.shareId) {
       toast.error(
         result.error ??
-          'Failed to make chat public. You may need to be logged in or own the chat.'
+          '分享失败，你可能需要登录，或只能分享自己创建的对话。'
       )
       return
     }
@@ -53,10 +53,10 @@ export function ChatShare({ chatId, className }: ChatShareProps) {
   const handleCopy = () => {
     if (shareUrl) {
       copyToClipboard(shareUrl)
-      toast.success('Link copied to clipboard')
+      toast.success('链接已复制到剪贴板')
       setOpen(false)
     } else {
-      toast.error('No link to copy')
+      toast.error('没有可复制的链接')
     }
   }
 
@@ -80,21 +80,20 @@ export function ChatShare({ chatId, className }: ChatShareProps) {
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Share Chat</DialogTitle>
+            <DialogTitle>分享对话</DialogTitle>
             <DialogDescription>
-              Anyone with the link will be able to view this chat if it&apos;s
-              public.
+              对话公开后，任何拿到链接的人都可以查看。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="items-center">
             {!shareUrl && (
               <Button onClick={handleShare} disabled={pending} size="sm">
-                {pending ? <Spinner /> : 'Get link'}
+                {pending ? <Spinner /> : '生成链接'}
               </Button>
             )}
             {shareUrl && (
               <Button onClick={handleCopy} disabled={pending} size="sm">
-                {'Copy link'}
+                {'复制链接'}
               </Button>
             )}
           </DialogFooter>

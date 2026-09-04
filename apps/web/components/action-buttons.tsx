@@ -29,27 +29,27 @@ interface ActionCategory {
 const actionCategories: ActionCategory[] = [
   {
     icon: Scale,
-    label: 'Decide',
+    label: '帮我选',
     key: 'decide'
   },
   {
     icon: Tool,
-    label: 'Troubleshoot',
+    label: '修问题',
     key: 'troubleshoot'
   },
   {
     icon: Settings,
-    label: 'How-to',
+    label: '怎么做',
     key: 'howto'
   },
   {
     icon: Bulb,
-    label: 'Understand',
+    label: '学明白',
     key: 'understand'
   },
   {
     icon: Pencil,
-    label: 'Create',
+    label: '写一个',
     key: 'create'
   }
 ]
@@ -60,35 +60,35 @@ const actionCategories: ActionCategory[] = [
 // example self-contained (no "my notes"/"this file" referencing absent context).
 const promptSamples: Record<string, string[]> = {
   troubleshoot: [
-    'My car starts then immediately stalls, but the electronics still work',
-    'Wi-Fi keeps dropping on one laptop but not my phone — how do I fix it?',
-    "My sourdough starter isn't rising after a week — what's wrong?",
-    'Next.js build fails with "Module not found" only in production'
+    '车子能打着火但马上熄火，电子设备都正常，怎么回事？',
+    '同一网络下笔记本 Wi-Fi 老掉线但手机没事，怎么修？',
+    '养了一周的天然酵母一直不发，哪里出问题了？',
+    'Next.js 本地正常但生产构建报 "Module not found"'
   ],
   howto: [
-    'Move my photos off Google Photos without losing albums',
-    'Set up a Proxmox home server for self-hosting',
-    'Convert a folder of .txt files to clean HTML',
-    'Set up a Plex media server to stream my movies'
+    '怎么把照片从 Google Photos 完整导出并保留相册？',
+    '如何用 Proxmox 搭建一台家庭自托管服务器？',
+    '怎么把一整个文件夹的 .txt 批量转成干净的 HTML？',
+    '如何用 Plex 搭建家庭影音服务器串流电影？'
   ],
   decide: [
-    'Tesla vs Rivian — which should I buy?',
-    'Standing vs sitting desk for lower-back pain — which and why?',
-    'A budget mirrorless camera for travel under $1,000',
-    'Notion vs Obsidian for a personal knowledge base'
+    '特斯拉和 Rivian，我该买哪辆？',
+    '久坐腰疼，升降桌和普通桌哪个更值得买？',
+    '预算 7000 元以内，旅行用微单怎么选？',
+    '做个人知识库，Notion 和 Obsidian 选哪个？'
   ],
   understand: [
-    'What causes the northern lights?',
-    'Why did the dinosaurs really go extinct?',
-    'How does a nuclear reactor actually generate electricity?',
+    '极光是怎么形成的？',
+    '恐龙灭绝的真正原因是什么？',
+    '核电站到底是怎么发电的？',
     // Timely slot — refresh seasonally (currently WWDC 2026).
-    'What did Apple announce at WWDC 2026?'
+    '苹果在 WWDC 2026 上发布了什么？'
   ],
   create: [
-    'Draft a 5-question Ancient Rome quiz with A–D answers',
-    'Outline a peer-support group for a prison setting',
-    'Create a high-protein meal plan for a week on a budget',
-    'Draft a beginner 3-day-per-week workout split'
+    '出一份 5 道题的古罗马知识小测验，附 A–D 选项',
+    '帮我起草一份读书会活动策划大纲',
+    '制定一份省钱的一周高蛋白饮食计划',
+    '设计一份新手每周 3 练的健身分化计划'
   ]
 }
 

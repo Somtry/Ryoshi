@@ -203,7 +203,7 @@ export const UserTextSection: React.FC<UserTextSectionProps> = ({
           text={stripMarkdownText(note.text)}
           label={
             note.title
-              ? `Note: ${stripMarkdownText(note.title) || 'Untitled note'}`
+              ? `笔记：${stripMarkdownText(note.title) || '无标题笔记'}`
               : 'Note'
           }
         />
