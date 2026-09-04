@@ -17,6 +17,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   plugins: [react()],
+  // 环境变量从 monorepo 根目录加载(与后端共用同一个 .env.local),
+  // 而不是默认的 apps/web 目录。Vite 只会暴露 VITE_* 前缀变量给浏览器。
+  envDir: path.resolve(__dirname, '../..'),
   resolve: {
     alias: {
       '@': __dirname,

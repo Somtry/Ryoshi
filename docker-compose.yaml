@@ -12,8 +12,9 @@ services:
   # ---- Python 后端 ----
   server:
     build:
-      context: ./apps/server
-      dockerfile: Dockerfile
+      # 上下文为仓库根:Dockerfile 需要 COPY 根目录 .env.local(统一配置源)
+      context: .
+      dockerfile: apps/server/Dockerfile
     env_file: .env.local
     environment:
       # 容器内数据库连接(覆盖 .env.local 里的本地地址)
@@ -38,8 +39,9 @@ services:
   # ---- 前端静态站点(Vite 构建 + Nginx 托管,/api 反代到 server)----
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      # 上下文为仓库根:VITE_* 变量在构建时从根目录 .env.local 内联
+      context: .
+      dockerfile: apps/web/Dockerfile
     ports:
       - '3000:80' # 用户访问入口仍是 http://localhost:3000
     depends_on:

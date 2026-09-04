@@ -10,16 +10,22 @@
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 仓库根目录的 .env.local 是唯一配置源(前后端共用)。
+# 用本文件的绝对路径向上四级锚定(apps/server/src/ryoshi/config.py -> 根),
+# 不依赖启动时的 cwd,本地 uvicorn、pytest、Docker 容器内行为一致。
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 class Settings(BaseSettings):
     """应用配置。字段默认值面向"本地匿名开发"这一最常见场景。"""
 
     model_config = SettingsConfigDict(
-        # 同时读取 .env 与环境变量;大小写不敏感
-        env_file=".env",
+        # 读取根目录 .env.local;进程环境变量优先级更高(如 docker-compose 的 environment 覆盖)
+        env_file=_REPO_ROOT / ".env.local",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

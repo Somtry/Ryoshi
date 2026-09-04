@@ -1,0 +1,21 @@
+# 版本控制
+.git/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# 前端
+node_modules/
+dist/
+.vite/
+
+# 参考原型
+morphic（原型）/
+
+# 系统与日志
+.DS_Store
+*.log
