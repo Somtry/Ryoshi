@@ -18,6 +18,7 @@
     与原项目 getCurrentUserId 的行为对齐。
 """
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass
@@ -36,6 +37,9 @@ _jwks_cache: dict = {}
 # 缓存有效期。Supabase 的 key 轮换会先发 standby 再切换,公钥端点会同时
 # 返回新旧 key,所以缓存几小时是安全的;遇到未知 kid 也会主动刷新(见下)。
 _JWKS_TTL_SECONDS = 3600
+
+# 异步锁:防止并发请求同时拉取 JWKS(thundering herd)
+_jwks_lock: asyncio.Lock | None = None
 
 
 @dataclass(frozen=True)
@@ -65,8 +69,18 @@ def _jwks_url(supabase_url: str) -> str:
     return f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
 
 
-def _fetch_jwks(supabase_url: str, *, force_refresh: bool = False) -> list[dict]:
-    """拉取 JWKS 公钥列表,带 TTL 缓存。失败抛 AuthError。"""
+async def _fetch_jwks(supabase_url: str, *, force_refresh: bool = False) -> list[dict]:
+    """拉取 JWKS 公钥列表,带 TTL 缓存。失败抛 AuthError。
+
+    修复:
+      - 改为异步,避免阻塞 event loop
+      - 加 asyncio.Lock 防止并发重复拉取
+      - 错误消息不泄露内部细节
+    """
+    global _jwks_lock
+    if _jwks_lock is None:
+        _jwks_lock = asyncio.Lock()
+
     now = time.time()
     if (
         not force_refresh
@@ -75,20 +89,36 @@ def _fetch_jwks(supabase_url: str, *, force_refresh: bool = False) -> list[dict]
     ):
         return _jwks_cache["keys"]
 
-    url = _jwks_url(supabase_url)
-    try:
-        resp = httpx.get(url, timeout=10.0)
-        resp.raise_for_status()
-        keys = resp.json().get("keys", [])
-    except (httpx.HTTPError, ValueError, KeyError) as exc:
-        raise AuthError(f"无法从 Supabase 拉取 JWKS 公钥: {exc}") from exc
+    async with _jwks_lock:
+        # 再次检查缓存(可能在等待锁的过程中被其他请求填充)
+        now = time.time()
+        if (
+            not force_refresh
+            and _jwks_cache.get("keys") is not None
+            and now - _jwks_cache.get("fetched_at", 0) < _JWKS_TTL_SECONDS
+        ):
+            return _jwks_cache["keys"]
 
-    if not keys:
-        raise AuthError("Supabase JWKS 端点未返回任何公钥")
+        url = _jwks_url(supabase_url)
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                keys = resp.json().get("keys", [])
+        except httpx.HTTPError as exc:
+            logger.error(f"JWKS fetch failed: {exc}")
+            raise AuthError("认证服务暂时不可用,请稍后重试") from exc
+        except (ValueError, KeyError) as exc:
+            logger.error(f"JWKS parse failed: {exc}")
+            raise AuthError("认证服务响应异常") from exc
 
-    _jwks_cache["keys"] = keys
-    _jwks_cache["fetched_at"] = now
-    return keys
+        if not keys:
+            logger.error("JWKS endpoint returned no keys")
+            raise AuthError("认证服务配置异常")
+
+        _jwks_cache["keys"] = keys
+        _jwks_cache["fetched_at"] = now
+        return keys
 
 
 def _find_key_for_token(token: str, keys: list[dict]) -> dict | None:
@@ -107,7 +137,7 @@ def _find_key_for_token(token: str, keys: list[dict]) -> dict | None:
     return None
 
 
-def verify_jwt(token: str) -> AuthUser:
+async def verify_jwt(token: str) -> AuthUser:
     """本地校验 Supabase JWT,返回认证用户。
 
     Supabase JWT 约定:
@@ -120,7 +150,7 @@ def verify_jwt(token: str) -> AuthUser:
 
     # 路径 1:JWKS 公钥校验(新版 ECC 项目,配 SUPABASE_URL 即可)
     if s.supabase_url:
-        return _verify_via_jwks(token, s.supabase_url)
+        return await _verify_via_jwks(token, s.supabase_url)
 
     # 路径 2:HS256 共享密钥回退(旧版项目/自建 Supabase)
     if s.supabase_jwt_secret:
@@ -129,29 +159,29 @@ def verify_jwt(token: str) -> AuthUser:
     raise AuthError("后端未配置 SUPABASE_URL(用于 JWKS)或 SUPABASE_JWT_SECRET")
 
 
-def _verify_via_jwks(token: str, supabase_url: str) -> AuthUser:
+async def _verify_via_jwks(token: str, supabase_url: str) -> AuthUser:
     """用 JWKS 公钥校验(ES256/ECC)。未知 kid 会强制刷新一次公钥再试。"""
-    keys = _fetch_jwks(supabase_url)
+    keys = await _fetch_jwks(supabase_url)
     key = _find_key_for_token(token, keys)
 
     if key is None:
         # kid 不在缓存里:可能是 Supabase 轮换了 key,强制刷新再试一次
-        keys = _fetch_jwks(supabase_url, force_refresh=True)
+        keys = await _fetch_jwks(supabase_url, force_refresh=True)
         key = _find_key_for_token(token, keys)
         if key is None:
-            raise AuthError("JWKS 中找不到与 token kid 匹配的公钥")
+            raise AuthError("JWT 签名验证失败")
 
     try:
         payload = jwt.decode(
             token,
             key,
-            # JWKS 公钥可能对应多种算法,按 key 的 kty/alg 限定;
-            # Supabase ECC 项目用 ES256
-            algorithms=["ES256", "RS256"],
+            # 严格限定 ES256:Supabase ECC 项目只用 ES256,不接收 RS256
+            algorithms=["ES256"],
             options={"verify_aud": False},
         )
     except (JWTError, JWKError) as exc:
-        raise AuthError(f"JWT 校验失败: {exc}") from exc
+        logger.warning(f"JWT decode failed: {exc}")
+        raise AuthError("JWT 无效或已过期") from exc
 
     return _user_from_payload(payload)
 
@@ -181,7 +211,7 @@ def _user_from_payload(payload: dict) -> AuthUser:
     return AuthUser(id=user_id, is_anonymous=False)
 
 
-def resolve_user(
+async def resolve_user(
     authorization: str | None,
     *,
     allow_anonymous_fallback: bool = True,
@@ -212,7 +242,14 @@ def resolve_user(
 
     if authorization:
         token = _extract_bearer_token(authorization)
-        return verify_jwt(token)
+        try:
+            return await verify_jwt(token)
+        except AuthError:
+            # token 无效/过期:允许匿名回退的接口(如 /api/models)按匿名处理,
+            # 而不是直接 401——前端可能带着过期的 localStorage token 访问公开接口。
+            if allow_anonymous_fallback:
+                return AuthUser(id=s.anonymous_user_id, is_anonymous=True)
+            raise
 
     if allow_anonymous_fallback:
         # 未登录但有匿名回退:与原项目"公开路径可匿名访问"对齐

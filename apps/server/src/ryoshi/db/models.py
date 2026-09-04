@@ -27,6 +27,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -34,6 +35,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -278,4 +280,45 @@ class Feedback(Base):
     __table_args__ = (
         Index("feedback_user_id_idx", "user_id"),
         Index("feedback_created_at_idx", "created_at"),
+    )
+
+
+class UserApiKey(Base):
+    """用户自带的 AI 提供商密钥(BYOK, Bring Your Own Key)。
+
+    设计意图:
+        原项目所有用户共享后端环境变量里的密钥;BYOK 允许每个登录用户
+        在设置页配自己的 key,后端按"用户密钥优先,环境变量兜底"的顺序选用。
+
+        每个用户在每个 provider 下至多一行(upsert 语义):
+          - provider: openai / anthropic / google / deepseek / openai-compatible
+          - encrypted_api_key: Fernet 加密后的 key(绝不明文落库)
+          - base_url / models / provider_name: 仅 openai-compatible 用
+            (自定义端点、模型清单、显示名)
+          - enabled: 软开关,用户可临时停用某个 provider 而不删 key
+
+        判定 provider 是否可用的口径由"全局环境变量"变为:
+          1. 当前用户的 user_api_keys 表里有 enabled=true 的行 → 用用户密钥
+          2. 否则回退到全局环境变量(匿名模式/未配密钥用户的兜底)
+    """
+
+    __tablename__ = "user_api_keys"
+
+    id: Mapped[str] = mapped_column(String(ID_LENGTH), primary_key=True, default=generate_id)
+    user_id: Mapped[str] = mapped_column(String(USER_ID_LENGTH))
+    provider: Mapped[str] = mapped_column(String(VARCHAR_LENGTH))
+    encrypted_api_key: Mapped[str] = mapped_column(Text)
+    # 以下三列仅 openai-compatible 用;其他 provider 为 NULL
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    models: Mapped[str | None] = mapped_column(Text, nullable=True)  # 逗号分隔模型清单
+    provider_name: Mapped[str | None] = mapped_column(String(VARCHAR_LENGTH), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="user_api_keys_user_provider_uniq"),
+        Index("user_api_keys_user_id_idx", "user_id"),
     )

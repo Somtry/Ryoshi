@@ -20,7 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-from ryoshi.agents.models import get_model
+from ryoshi.agents.models import aget_model
 from ryoshi.tools.fetch import fetch_url
 from ryoshi.tools.search import search_with_fallback
 
@@ -110,17 +110,18 @@ async def fetch(url: str) -> dict:
     return result.to_dict()
 
 
-def create_quick_researcher(model: str):
+async def create_quick_researcher(model: str, user_id: str | None = None):
     """创建 Quick 模式研究智能体。
 
     参数:
         model: "providerId:modelId" 形式的模型标识
+        user_id: 当前登录用户 id(BYOK);匿名传 None,只查环境变量
     返回:
         编译好的 LangGraph 智能体,可用 .astream_events() 流式驱动。
     """
     from datetime import datetime
 
-    chat_model = get_model(model)
+    chat_model = await aget_model(model, user_id)
     tools = [search, fetch]
 
     system_prompt = QUICK_MODE_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))
@@ -275,17 +276,20 @@ async def ask_question(question: str, options: list[str] | None = None) -> dict:
     }
 
 
-def create_adaptive_researcher(model: str):
+async def create_adaptive_researcher(model: str, user_id: str | None = None):
     """创建 Adaptive 模式研究智能体。
 
     相比 Quick 模式:
       - 工具多两个:todo_write(任务管理)、ask_question(澄清)
       - 步数上限 50(对应原项目 maxSteps=50)
       - prompt 鼓励多轮搜索与多角度覆盖
+    参数:
+        model: "providerId:modelId" 形式的模型标识
+        user_id: 当前登录用户 id(BYOK);匿名传 None,只查环境变量
     """
     from datetime import datetime
 
-    chat_model = get_model(model)
+    chat_model = await aget_model(model, user_id)
     tools = [search, fetch, todo_write, ask_question]
 
     system_prompt = ADAPTIVE_MODE_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from ryoshi.agents.models import ModelConfigError, default_model_id
+from ryoshi.agents.models import ModelConfigError, adefault_model_id
 from ryoshi.agents.researcher import create_quick_researcher
 from ryoshi.auth import resolve_user
 from ryoshi.chat.frames import Error
@@ -115,8 +115,54 @@ async def chat(
     """处理一次提问并流式返回回答。"""
     # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT,
     # 未登录但允许匿名回退(对应原项目"未登录也可提问"的行为)
-    user = resolve_user(authorization, allow_anonymous_fallback=True)
+    user = await resolve_user(authorization, allow_anonymous_fallback=True)
     user_text = _extract_user_text(req)
+
+    # ---- 模型校验(在限流之前,避免模型错误浪费限流额度) ----
+    # 模型选择:优先用前端 cookie 中的选择,无效则回退默认模型
+    # 对应原项目 lib/utils/model-selection.ts 的 cookie 读取逻辑。
+    # BYOK:登录用户用其私有密钥判定可用性与默认模型;匿名只看环境变量。
+    byok_user_id = None if user.is_anonymous else user.id
+    try:
+        if req.modelId:
+            # 校验格式: provider:model
+            if ":" not in req.modelId:
+                raise ModelConfigError(f"模型标识缺少 provider 前缀: {req.modelId!r}")
+
+            provider_id, model_id_part = req.modelId.split(":", 1)
+            if not provider_id or not model_id_part:
+                raise ModelConfigError(f"模型标识格式无效: {req.modelId!r}")
+
+            # 校验 provider 可用(有密钥)
+            from ryoshi.agents.models import ais_provider_enabled
+
+            if not await ais_provider_enabled(provider_id, byok_user_id):
+                raise ModelConfigError(f"provider 未启用: {provider_id}")
+
+            # 校验 modelId 在白名单内(防止恶意调用未声明的模型)
+            from ryoshi.agents.models import _resolve_credentials
+
+            creds = await _resolve_credentials(provider_id, byok_user_id)
+            if creds is not None and creds.models:
+                allowed_models = [m.strip() for m in creds.models.split(",") if m.strip()]
+                if model_id_part not in allowed_models:
+                    raise ModelConfigError(
+                        f"模型 {model_id_part} 不在允许列表中。可用模型: {', '.join(allowed_models)}"
+                    )
+
+            model_id = req.modelId
+        else:
+            model_id = await adefault_model_id(byok_user_id)
+    except ModelConfigError as exc:
+        # 未配置任何模型密钥:返回规范 error 帧而非裸 500,前端能统一展示。
+        # 注意:except 的 exc 在块结束后会被解释器删除,闭包须先存到局部变量。
+        error_message = str(exc)
+
+        async def no_model():
+            yield encode_frame(Error(errorText=error_message))
+            yield encode_done()
+
+        return StreamingResponse(no_model(), headers=SSE_HEADERS)
 
     # ---- 三层限流(仅云端部署生效) ----
     # 对应原项目 app/api/chat/route.ts 的限流检查顺序:
@@ -225,37 +271,13 @@ async def chat(
                 content={"error": "You do not have permission to write to this chat."},
             )
 
-    # 模型选择:优先用前端 cookie 中的选择,无效则回退默认模型
-    # 对应原项目 lib/utils/model-selection.ts 的 cookie 读取逻辑
-    try:
-        if req.modelId:
-            # 校验 provider 可用(有密钥),不可用则抛 ModelConfigError
-            from ryoshi.agents.models import is_provider_enabled
-
-            provider_id = req.modelId.split(":")[0] if ":" in req.modelId else ""
-            if not is_provider_enabled(provider_id):
-                raise ModelConfigError(f"provider 未启用: {provider_id}")
-            model_id = req.modelId
-        else:
-            model_id = default_model_id()
-    except ModelConfigError as exc:
-        # 未配置任何模型密钥:返回规范 error 帧而非裸 500,前端能统一展示。
-        # 注意:except 的 exc 在块结束后会被解释器删除,闭包须先存到局部变量。
-        error_message = str(exc)
-
-        async def no_model():
-            yield encode_frame(Error(errorText=error_message))
-            yield encode_done()
-
-        return StreamingResponse(no_model(), headers=SSE_HEADERS)
-
     # 按 searchMode 选择智能体:quick(默认)或 adaptive
     if req.searchMode == "adaptive":
         from ryoshi.agents.researcher import create_adaptive_researcher
-        agent = create_adaptive_researcher(model_id)
+        agent = await create_adaptive_researcher(model_id, byok_user_id)
         max_steps = 50  # 对应原项目 adaptive maxSteps=50
     else:
-        agent = create_quick_researcher(model_id)
+        agent = await create_quick_researcher(model_id, byok_user_id)
         max_steps = 20  # 对应原项目 quick maxSteps=20
 
     # ---- 构造模型输入:历史消息 + 当前消息,再按上下文窗口截断 ----

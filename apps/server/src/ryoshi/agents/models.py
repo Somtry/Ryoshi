@@ -6,21 +6,55 @@
     输入约定与原项目一致——"openai:gpt-5"、"anthropic:claude-..." 这样的
     带前缀字符串,按前缀分发到对应 provider 构造模型实例。
 
-    哪个 provider 可用,取决于配置了哪些 API key(is_provider_enabled),
-    与原项目的判断逻辑逐条对应。
+    BYOK 改造:
+      判定 provider 是否可用的口径分两层(用户密钥优先,环境变量兜底):
+        1. 传了 user_id 且该用户在 user_api_keys 表里有 enabled=true 的对应行
+           → 用用户自己的密钥(解密后)构造模型
+        2. 否则回退到全局环境变量(匿名模式、未配密钥用户的兜底)
+
+      入口分两组:
+        - 异步: ais_provider_enabled / aget_model / adefault_model_id
+          (路由、智能体里用——它们都在异步上下文)
+        - 同步: is_provider_enabled / get_model / default_model_id
+          (旧调用点保留;只能看环境变量,看不到用户密钥)
 """
+
+from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
 
 from ryoshi.config import get_settings
+
+#: 支持的 BYOK provider 列表(顺序即前端设置页的展示顺序)
+BYOK_PROVIDERS = ("openai", "anthropic", "google", "deepseek", "openai-compatible")
 
 
 class ModelConfigError(Exception):
     """模型配置错误(前缀未知,或对应 provider 未配置密钥)。"""
 
 
+@dataclass(frozen=True)
+class ProviderCredentials:
+    """某 provider 的实际接入凭据(已确定来源:用户密钥 or 环境变量)。"""
+
+    api_key: str
+    base_url: str = ""
+    models: str = ""  # 逗号分隔(openai-compatible 用)
+    provider_name: str = ""  # 显示名(openai-compatible 用)
+    source: str = "env"  # "user" 或 "env"
+
+
+# ---------------------------------------------------------------------------
+# 同步路径(仅环境变量)——保留给启动期/无 DB 上下文的旧调用点
+# ---------------------------------------------------------------------------
+
+
 def is_provider_enabled(provider_id: str) -> bool:
-    """判断某 provider 是否已配置可用(与原项目 isProviderEnabled 对应)。"""
+    """判断某 provider 是否已配置可用(仅看全局环境变量)。
+
+    与原项目 isProviderEnabled 对应。BYOK 后,路由/智能体应改用
+    ais_provider_enabled(user_id)——本函数只用于无 DB 上下文的场景。
+    """
     s = get_settings()
     return {
         "openai": bool(s.openai_api_key),
@@ -35,64 +69,46 @@ def is_provider_enabled(provider_id: str) -> bool:
     }.get(provider_id, False)
 
 
-def get_model(full_model: str) -> BaseChatModel:
-    """把 "providerId:modelId" 解析成 LangChain 聊天模型。
+def _env_credentials(provider_id: str) -> ProviderCredentials | None:
+    """从环境变量取 provider 凭据。未配置返回 None。"""
+    s = get_settings()
+    if provider_id == "openai" and s.openai_api_key:
+        return ProviderCredentials(api_key=s.openai_api_key)
+    if provider_id == "anthropic" and s.anthropic_api_key:
+        return ProviderCredentials(api_key=s.anthropic_api_key)
+    if provider_id == "google" and s.google_generative_ai_api_key:
+        return ProviderCredentials(api_key=s.google_generative_ai_api_key)
+    if provider_id == "deepseek" and s.deepseek_api_key:
+        return ProviderCredentials(
+            api_key=s.deepseek_api_key, base_url=s.deepseek_base_url
+        )
+    if (
+        provider_id == "openai-compatible"
+        and s.openai_compatible_api_key
+        and s.openai_compatible_api_base_url
+    ):
+        return ProviderCredentials(
+            api_key=s.openai_compatible_api_key,
+            base_url=s.openai_compatible_api_base_url,
+            models=s.openai_compatible_models,
+            provider_name=s.openai_compatible_provider_name or "OpenAI Compatible",
+        )
+    return None
 
-    参数:
-        full_model: 形如 "openai:gpt-5.6-luna"、"anthropic:claude-opus-4-8"
-    返回:
-        已配置好密钥、可直接 .bind_tools() / .astream() 的 ChatModel。
-    """
+
+def get_model(full_model: str) -> BaseChatModel:
+    """同步版 get_model(仅环境变量)。新代码请用 aget_model。"""
     if ":" not in full_model:
         raise ModelConfigError(f"模型标识缺少 provider 前缀: {full_model!r}")
     provider_id, model_id = full_model.split(":", 1)
-
-    if not is_provider_enabled(provider_id):
+    creds = _env_credentials(provider_id)
+    if creds is None:
         raise ModelConfigError(f"provider 未启用(缺少密钥): {provider_id}")
-
-    s = get_settings()
-    if provider_id == "openai":
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(model=model_id, api_key=s.openai_api_key)
-    if provider_id == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-
-        return ChatAnthropic(model=model_id, api_key=s.anthropic_api_key)
-    if provider_id == "google":
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(
-            model=model_id, google_api_key=s.google_generative_ai_api_key
-        )
-    if provider_id == "deepseek":
-        # DeepSeek 是 OpenAI 兼容 API:用 ChatOpenAI 改 base_url 即可接入
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=model_id, api_key=s.deepseek_api_key, base_url=s.deepseek_base_url
-        )
-    if provider_id == "openai-compatible":
-        # 通用 OpenAI 兼容端点(DeepSeek 官方接入方式;也可指向任意兼容服务)
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=model_id,
-            api_key=s.openai_compatible_api_key,
-            base_url=s.openai_compatible_api_base_url,
-        )
-
-    raise ModelConfigError(f"暂不支持的 provider: {provider_id}")
+    return _build_model(provider_id, model_id, creds)
 
 
 def default_model_id() -> str:
-    """返回默认可用模型(Quick 模式起步用)。
-
-    优先级:
-      1. 配置了 OPENAI_COMPATIBLE_* 时,取 OPENAI_COMPATIBLE_MODELS 清单第一个
-      2. DeepSeek 便捷写法(DEEPSEEK_API_KEY)
-      3. 各家官方 provider
-    """
+    """返回默认可用模型(仅看环境变量)。新代码请用 adefault_model_id。"""
     s = get_settings()
     if s.openai_compatible_api_key and s.openai_compatible_api_base_url:
         first = next(
@@ -110,3 +126,265 @@ def default_model_id() -> str:
     if s.google_generative_ai_api_key:
         return "google:gemini-2.0-flash"
     raise ModelConfigError("未配置任何 AI 提供商密钥,无法选用默认模型")
+
+
+# ---------------------------------------------------------------------------
+# 异步路径(BYOK 感知)——路由/智能体使用
+# ---------------------------------------------------------------------------
+
+
+async def _user_credentials(provider_id: str, user_id: str) -> ProviderCredentials | None:
+    """从 user_api_keys 表取该用户的 provider 凭据。无记录/未启用返回 None。"""
+    if not user_id:
+        return None
+
+    from sqlalchemy import select
+
+    from ryoshi.crypto import CryptoError, decrypt_api_key
+    from ryoshi.db.engine import get_session_factory
+    from ryoshi.db.models import UserApiKey
+
+    async with get_session_factory()() as session:
+        row = (
+            await session.execute(
+                select(UserApiKey).where(
+                    UserApiKey.user_id == user_id,
+                    UserApiKey.provider == provider_id,
+                    UserApiKey.enabled.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if row is None:
+            return None
+
+        # 在 session 内读取所有属性,避免 DetachedInstanceError
+        encrypted_api_key = row.encrypted_api_key
+        base_url = row.base_url or ""
+        models_raw = row.models or ""
+        provider_name = row.provider_name or ""
+
+    # session 已关闭,后续操作只用上面读出的原始值
+    try:
+        api_key = decrypt_api_key(encrypted_api_key)
+    except CryptoError:
+        # 密钥解不出(加密 key 变更等)按"未配置"处理,回退到环境变量
+        return None
+
+    # models 存 JSON 数组字符串,解析为逗号分隔供内部使用
+    # 兼容旧格式:如果已经是逗号分隔(无 [ ]),直接使用
+    models_parsed = ""
+    if models_raw:
+        import json
+
+        try:
+            models_list = json.loads(models_raw)
+            if isinstance(models_list, list):
+                models_parsed = ",".join(str(m) for m in models_list)
+            else:
+                models_parsed = models_raw
+        except (ValueError, TypeError):
+            # 旧格式:逗号分隔字符串
+            models_parsed = models_raw
+
+    return ProviderCredentials(
+        api_key=api_key,
+        base_url=base_url,
+        models=models_parsed,
+        provider_name=provider_name,
+        source="user",
+    )
+
+
+async def _resolve_credentials(
+    provider_id: str, user_id: str | None
+) -> ProviderCredentials | None:
+    """BYOK 解析:登录用户只用自己的密钥;未登录用环境变量兜底。
+
+    语义(与部署阶段对齐):
+      - 未登录(匿名/访客): 用全局环境变量。开发期方便,上线后删掉
+        .env 里的 key 即变成"必须登录+配 key 才能用"。
+      - 已登录: 只用 user_api_keys 表里自己的密钥;没配就是"未启用",
+        绝不回退到环境变量——key 与用户身份严格绑定。
+    """
+    if user_id:
+        return await _user_credentials(provider_id, user_id)
+    return _env_credentials(provider_id)
+
+
+async def _all_user_credentials(user_id: str) -> dict[str, ProviderCredentials]:
+    """一次性获取当前用户所有 provider 的凭据(减少 N+1 查询)。
+
+    返回: {provider_id: ProviderCredentials}
+    未配置或解密失败的 provider 不在返回字典中。
+    """
+    if not user_id:
+        return {}
+
+    from sqlalchemy import select
+
+    from ryoshi.crypto import CryptoError, decrypt_api_key
+    from ryoshi.db.engine import get_session_factory
+    from ryoshi.db.models import UserApiKey
+
+    async with get_session_factory()() as session:
+        rows = (
+            await session.execute(
+                select(UserApiKey).where(
+                    UserApiKey.user_id == user_id,
+                    UserApiKey.enabled.is_(True),
+                )
+            )
+        ).scalars().all()
+
+        # 在 session 内读取所有属性
+        row_data = [
+            {
+                "provider": row.provider,
+                "encrypted_api_key": row.encrypted_api_key,
+                "base_url": row.base_url or "",
+                "models_raw": row.models or "",
+                "provider_name": row.provider_name or "",
+            }
+            for row in rows
+        ]
+
+    result: dict[str, ProviderCredentials] = {}
+    for data in row_data:
+        try:
+            api_key = decrypt_api_key(data["encrypted_api_key"])
+        except CryptoError:
+            continue  # 解密失败,跳过该 provider
+
+        # 解析 models JSON
+        models_parsed = ""
+        if data["models_raw"]:
+            import json
+
+            try:
+                models_list = json.loads(data["models_raw"])
+                if isinstance(models_list, list):
+                    models_parsed = ",".join(str(m) for m in models_list)
+                else:
+                    models_parsed = data["models_raw"]
+            except (ValueError, TypeError):
+                models_parsed = data["models_raw"]
+
+        result[data["provider"]] = ProviderCredentials(
+            api_key=api_key,
+            base_url=data["base_url"],
+            models=models_parsed,
+            provider_name=data["provider_name"],
+            source="user",
+        )
+
+    return result
+
+
+async def ais_provider_enabled(provider_id: str, user_id: str | None = None) -> bool:
+    """异步版 is_provider_enabled:用户密钥或环境变量任一可用即为 True。"""
+    return (await _resolve_credentials(provider_id, user_id)) is not None
+
+
+async def aget_model(full_model: str, user_id: str | None = None) -> BaseChatModel:
+    """把 "providerId:modelId" 解析成 LangChain 聊天模型(BYOK 感知)。
+
+    参数:
+        full_model: 形如 "openai:gpt-4o-mini"、"anthropic:claude-haiku-4-5"
+        user_id: 当前登录用户 id(匿名/未登录传 None,只查环境变量)
+    返回:
+        已配置好密钥、可直接 .bind_tools() / .astream() 的 ChatModel。
+    """
+    if ":" not in full_model:
+        raise ModelConfigError(f"模型标识缺少 provider 前缀: {full_model!r}")
+    provider_id, model_id = full_model.split(":", 1)
+
+    creds = await _resolve_credentials(provider_id, user_id)
+    if creds is None:
+        raise ModelConfigError(f"provider 未启用(缺少密钥): {provider_id}")
+    return _build_model(provider_id, model_id, creds)
+
+
+async def adefault_model_id(user_id: str | None = None) -> str:
+    """返回默认可用模型(BYOK 感知)。
+
+    策略:
+      - 登录用户:返回第一个已配置的模型;一个都没配则报错
+      - 匿名用户:从环境变量读 openai-compatible 的默认模型(开发期用)
+    """
+    if user_id:
+        # 登录用户:一次性查所有凭据,找第一个配置了 key 且选了模型的 provider
+        all_creds = await _all_user_credentials(user_id)
+        for provider_id in BYOK_PROVIDERS:
+            creds = all_creds.get(provider_id)
+            if creds is not None and creds.models:
+                first = next(
+                    (m.strip() for m in creds.models.split(",") if m.strip()),
+                    None,
+                )
+                if first:
+                    return f"{provider_id}:{first}"
+        raise ModelConfigError(
+            "未选择模型。请先在 API Keys 设置中配置并选择模型。"
+        )
+
+    # 匿名用户:从环境变量读 openai-compatible 默认模型
+    s = get_settings()
+    if s.openai_compatible_api_key and s.openai_compatible_api_base_url:
+        first = next(
+            (m.strip() for m in s.openai_compatible_models.split(",") if m.strip()),
+            None,
+        )
+        if first:
+            return f"openai-compatible:{first}"
+
+    raise ModelConfigError("未配置任何 AI 提供商密钥,无法选用默认模型")
+
+
+async def aget_openai_compatible_meta(
+    user_id: str | None = None,
+) -> ProviderCredentials | None:
+    """给 /api/models 用:取 openai-compatible 的完整元信息(含 models 清单)。"""
+    return await _resolve_credentials("openai-compatible", user_id)
+
+
+# ---------------------------------------------------------------------------
+# 构造 LangChain 模型(同步,纯工厂)
+# ---------------------------------------------------------------------------
+
+
+def _build_model(
+    provider_id: str, model_id: str, creds: ProviderCredentials
+) -> BaseChatModel:
+    """按 provider 构造 LangChain ChatModel。"""
+    if provider_id == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(model=model_id, api_key=creds.api_key)
+    if provider_id == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(model=model_id, api_key=creds.api_key)
+    if provider_id == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(model=model_id, google_api_key=creds.api_key)
+    if provider_id == "deepseek":
+        # DeepSeek 是 OpenAI 兼容 API:用 ChatOpenAI 改 base_url 即可接入
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model_id,
+            api_key=creds.api_key,
+            base_url=creds.base_url or "https://api.deepseek.com",
+        )
+    if provider_id == "openai-compatible":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model_id,
+            api_key=creds.api_key,
+            base_url=creds.base_url,
+        )
+
+    raise ModelConfigError(f"暂不支持的 provider: {provider_id}")

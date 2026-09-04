@@ -81,7 +81,7 @@ async def upload_file(
     """
     s = get_settings()
     # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT
-    user = resolve_user(authorization, allow_anonymous_fallback=True)
+    user = await resolve_user(authorization, allow_anonymous_fallback=True)
     user_id = user.id
 
     if not _is_storage_configured():

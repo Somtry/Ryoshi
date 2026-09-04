@@ -26,6 +26,36 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def normalize_database_url(url: str) -> str:
+    """把用户粘贴的 Postgres 连接串规范化为 SQLAlchemy+asyncpg 可用形式。
+
+    两件事:
+      1. "postgresql://..." → "postgresql+asyncpg://..."(显式指定异步驱动)
+      2. libpq 风格的 ?sslmode=require&channel_binding=require 翻译成
+         asyncpg 的 connect_args 能认的形式(sslmode 只保留到 URL 层,
+         真正的 ssl 开关由调用方从返回值里读)
+
+    返回 (url, connect_args) 二元组;connect_args 可直接喂给 create_async_engine。
+    该函数同时为运行时(init_db)与 Alembic 迁移(env.py)服务,避免两处
+    各写一遍解析逻辑又不同步。
+    """
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    connect_args: dict = {}
+    if "?" in url:
+        base, query = url.split("?", 1)
+        params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+        sslmode = params.pop("sslmode", None)
+        params.pop("channel_binding", None)  # asyncpg 不支持,丢弃
+        if sslmode in ("require", "verify-ca", "verify-full"):
+            connect_args["ssl"] = True
+        elif sslmode == "disable":
+            connect_args["ssl"] = False
+        url = base + ("?" + "&".join(f"{k}={v}" for k, v in params.items()) if params else "")
+    return url, connect_args
+
+
 def init_db() -> AsyncEngine:
     """创建全局异步引擎(连接池)。
 
@@ -42,22 +72,7 @@ def init_db() -> AsyncEngine:
     """
     global _engine, _session_factory
     settings = get_settings()
-    url = settings.database_url
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-    # 把 libpq 风格 query 参数翻译成 asyncpg 的 connect_args
-    connect_args: dict = {}
-    if "?" in url:
-        base, query = url.split("?", 1)
-        params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
-        sslmode = params.pop("sslmode", None)
-        params.pop("channel_binding", None)  # asyncpg 不支持,丢弃
-        if sslmode in ("require", "verify-ca", "verify-full"):
-            connect_args["ssl"] = True
-        elif sslmode == "disable":
-            connect_args["ssl"] = False
-        url = base + ("?" + "&".join(f"{k}={v}" for k, v in params.items()) if params else "")
+    url, connect_args = normalize_database_url(settings.database_url)
 
     _engine = create_async_engine(
         url,

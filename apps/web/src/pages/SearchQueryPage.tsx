@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 
 import { apiFetch } from '@/lib/api-client'
+import { BYOK_KEYS_UPDATED_EVENT } from '@/lib/events'
 import type { ModelSelectorData } from '@/lib/types/model-selector'
 import { generateUUID } from '@/lib/utils'
 
@@ -24,9 +25,18 @@ export default function SearchQueryPage() {
   const [chatId] = useState(() => generateUUID())
 
   useEffect(() => {
-    apiFetch<ModelSelectorData>('/api/models')
-      .then(setModelSelectorData)
-      .catch(() => setModelSelectorData(undefined))
+    const fetchModels = () => {
+      apiFetch<ModelSelectorData>('/api/models')
+        .then(setModelSelectorData)
+        .catch(() => setModelSelectorData(undefined))
+    }
+
+    fetchModels()
+
+    // BYOK 配置保存后刷新模型列表
+    const handleByokUpdate = () => fetchModels()
+    window.addEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
+    return () => window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
   }, [])
 
   if (!q) {

@@ -41,10 +41,10 @@ class MessageFeedbackRequest(BaseModel):
     messageId: str | None = None
 
 
-def _optional_user(authorization: str | None = Header(None)) -> AuthUser | None:
+async def _optional_user(authorization: str | None = Header(None)) -> AuthUser | None:
     """反馈允许匿名提交,认证失败不报错,只是 user_id 为空。"""
     try:
-        return resolve_user(authorization, allow_anonymous_fallback=True)
+        return await resolve_user(authorization, allow_anonymous_fallback=True)
     except AuthError:
         return None
 

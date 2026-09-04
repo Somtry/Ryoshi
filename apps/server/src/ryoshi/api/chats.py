@@ -26,14 +26,14 @@ from ryoshi.db.persistence import (
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
 
-def _current_user(authorization: str | None = Header(None)) -> AuthUser:
+async def _current_user(authorization: str | None = Header(None)) -> AuthUser:
     """FastAPI 依赖:从 Authorization header 解析当前用户。
 
     对应原项目 getCurrentUserId——ENABLE_AUTH=false 时返回匿名用户,
     ENABLE_AUTH=true 时校验 JWT。认证失败返回 401。
     """
     try:
-        return resolve_user(authorization, allow_anonymous_fallback=True)
+        return await resolve_user(authorization, allow_anonymous_fallback=True)
     except AuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

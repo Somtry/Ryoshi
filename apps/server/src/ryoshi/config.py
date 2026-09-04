@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     #: Supabase 项目地址与密钥(JWT 校验用)
     supabase_url: str = ""
     supabase_jwt_secret: str = ""
+    #: BYOK 用户密钥的 Fernet 加密 key(base64url 32 字节)。
+    #: 生产必须显式配置;留空时按 environment+匿名用户 id 派生一个开发用 key。
+    byok_encryption_key: str = ""
 
     # ---- AI 提供商密钥(按配置的模型选用其一即可起步)----
     openai_api_key: str = ""
@@ -59,6 +62,8 @@ class Settings(BaseSettings):
     openai_compatible_api_key: str = ""
     openai_compatible_api_base_url: str = ""
     openai_compatible_models: str = ""
+    #: 显示名(模型选择器 UI 标签);默认 "OpenAI Compatible"
+    openai_compatible_provider_name: str = ""
 
     # ---- 搜索提供商密钥 ----
     tavily_api_key: str = ""

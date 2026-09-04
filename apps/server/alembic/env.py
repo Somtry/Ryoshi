@@ -19,12 +19,15 @@ from alembic import context
 
 # 导入模型元数据,让 Alembic 能自动比对出表结构变更(autogenerate 的基础)
 from ryoshi.config import get_settings
+from ryoshi.db.engine import normalize_database_url
 from ryoshi.db.models import Base
 
 config = context.config
 
-# 把应用的数据库 URL 注入 Alembic 配置(覆盖 ini 里的占位)
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# 把应用的数据库 URL 注入 Alembic 配置(覆盖 ini 里的占位)。
+# 复用运行时的规范化逻辑:补 +asyncpg 驱动、翻译 sslmode 等 libpq 参数。
+_db_url, _db_connect_args = normalize_database_url(get_settings().database_url)
+config.set_main_option("sqlalchemy.url", _db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -58,6 +61,8 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # ssl 等驱动级参数直接以 connect_args 传入(config 无法表达嵌套 dict)
+        connect_args=_db_connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

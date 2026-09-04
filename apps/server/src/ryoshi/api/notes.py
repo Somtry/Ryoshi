@@ -25,9 +25,9 @@ from ryoshi.db.models import Note
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
 
-def _current_user(authorization: str | None = Header(None)) -> AuthUser:
+async def _current_user(authorization: str | None = Header(None)) -> AuthUser:
     try:
-        return resolve_user(authorization, allow_anonymous_fallback=True)
+        return await resolve_user(authorization, allow_anonymous_fallback=True)
     except AuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
