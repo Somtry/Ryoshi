@@ -188,7 +188,6 @@ class TestReasoningStream:
     """推理模型的思考链应产出 reasoning-* 帧并落库为 reasoning 部件。"""
 
     async def test_思考链先于正文_帧序正确(self):
-        from ryoshi.chat.frames import ReasoningEnd, ReasoningStart
 
         frames = [
             f

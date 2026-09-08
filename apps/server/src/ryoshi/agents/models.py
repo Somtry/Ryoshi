@@ -398,7 +398,6 @@ def _build_model(
 ) -> BaseChatModel:
     """按 provider 构造 LangChain ChatModel。"""
     if provider_id == "openai":
-        from langchain_openai import ChatOpenAI
 
         return ReasoningCapableChatOpenAI(model=model_id, api_key=creds.api_key)
     if provider_id == "anthropic":
