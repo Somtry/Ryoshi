@@ -63,6 +63,51 @@ class SearchResults:
             **({"answer": self.answer} if self.answer else {}),
         }
 
+    def to_cache_json(self) -> str:
+        """序列化为缓存条目(Redis 存取;与 to_dict 分离,格式可独立演进)。"""
+        import json
+
+        return json.dumps(
+            {
+                "results": [
+                    {
+                        "title": r.title,
+                        "url": r.url,
+                        "content": r.content,
+                        "score": r.score,
+                        "published_date": r.published_date,
+                    }
+                    for r in self.results
+                ],
+                "images": self.images,
+                "query": self.query,
+                "answer": self.answer,
+            },
+            ensure_ascii=False,
+        )
+
+    @classmethod
+    def from_cache_json(cls, raw: str) -> "SearchResults":
+        """从缓存条目还原。字段缺失/多余都容忍(缓存格式向前兼容)。"""
+        import json
+
+        data = json.loads(raw)
+        return cls(
+            results=[
+                SearchResult(
+                    title=r.get("title", ""),
+                    url=r.get("url", ""),
+                    content=r.get("content", ""),
+                    score=r.get("score", 0.0),
+                    published_date=r.get("published_date"),
+                )
+                for r in data.get("results", [])
+            ],
+            images=data.get("images", []),
+            query=data.get("query", ""),
+            answer=data.get("answer"),
+        )
+
 
 class SearchProviderError(Exception):
     """搜索源调用失败(网络错误或非 2xx)。带 HTTP 状态以便上层做降级判断。"""
@@ -345,7 +390,43 @@ async def search_with_fallback(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
 ) -> SearchResults:
-    """带降级链的搜索。默认源失败(可恢复)时按 _FALLBACK_ORDER 依次尝试。"""
+    """带降级链的搜索。默认源失败(可恢复)时按 _FALLBACK_ORDER 依次尝试。
+
+    外层套 Redis 缓存(tools/cache.py):同参数 query 在 TTL 内直接命中,
+    不再消耗搜索源配额;Redis 不可用时静默穿透。
+    """
+    from ryoshi.tools.cache import cache_get, cache_put
+
+    cached = await cache_get(
+        query, max_results, search_depth, include_domains, exclude_domains
+    )
+    if cached is not None:
+        return cached
+
+    result = await _search_with_fallback_inner(
+        query, max_results, search_depth, include_domains, exclude_domains
+    )
+    # 写入 key 用"本次请求的 query"显式覆盖(个别搜索源会改写 result.query,
+    # 拿它构造 key 会与读取 key 错开 → 缓存永远不命中)
+    await cache_put(
+        result,
+        max_results,
+        search_depth,
+        include_domains,
+        exclude_domains,
+        query_override=query,
+    )
+    return result
+
+
+async def _search_with_fallback_inner(
+    query: str,
+    max_results: int = 10,
+    search_depth: str = "basic",
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> SearchResults:
+    """降级链本体(缓存未命中时执行)。"""
     settings = get_settings()
     preferred = getattr(settings, "search_api", None) or "tavily"
 
