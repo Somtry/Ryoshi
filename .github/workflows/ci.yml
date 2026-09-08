@@ -1,0 +1,72 @@
+# CI:ruff + pytest(server)/ tsc + vitest + build(web)。
+# 两份缓存(uv / pnpm),PR 与 push 都跑;约 3 分钟。
+# 依赖说明:P1-3 已把 ruff/tsc 清零,此 CI 一建立即为绿;
+# 后续任何回归(类型错误、测试失败、lint)在合并前被拦下。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server (Python 3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        run: uv sync --frozen
+
+      - name: Ruff 检查
+        run: uv run ruff check src tests
+
+      - name: Pytest
+        run: uv run pytest -q
+
+  web:
+    name: Web (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript 检查
+        run: npx tsc --noEmit
+
+      - name: Vitest
+        run: npx vitest run
+
+      - name: 构建
+        run: pnpm build
