@@ -22,6 +22,9 @@ from typing import Any
 from ryoshi.chat.frames import (
     Finish,
     FinishStep,
+    ReasoningDelta,
+    ReasoningEnd,
+    ReasoningStart,
     SourceUrl,
     Start,
     StartStep,
@@ -90,6 +93,10 @@ async def agent_stream_to_frames(
     # 文本块 id:同一轮连续文本共用一个 id,模型开始新一轮文本时换新的
     current_text_id: str | None = None
     text_open = False
+    # 推理段(思考链)状态,与文本段平行管理
+    current_reasoning_id: str | None = None
+    reasoning_open = False
+    reasoning_buffer: list[str] = []
 
     # try 从第一个 yield 之前就开始:断开可能发生在任意一帧(包括 start),
     # finally 必须覆盖整个产出过程,否则断在头部的流拿不到快照。
@@ -138,8 +145,38 @@ async def agent_stream_to_frames(
                             seg.get("text", "") if isinstance(seg, dict) else str(seg)
                             for seg in text
                         )
+
+                    # ---- 推理思考链(DeepSeek-R1 等 OpenAI 兼容推理模型)----
+                    # reasoning_content 由 ReasoningCapableChatOpenAI 从流式
+                    # delta 里抢救进 additional_kwargs(上游会丢弃)。
+                    # 与正文文本互斥输出:思考段先行,开始正文时闭合思考段。
+                    # 帧协议:reasoning-start / reasoning-delta / reasoning-end,
+                    # 前端 reasoning-section 折叠渲染;落库走 reasoning 部件。
+                    reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get(
+                        "reasoning_content"
+                    )
+                    if isinstance(reasoning, str) and reasoning:
+                        if not reasoning_open:
+                            current_reasoning_id = _new_id()
+                            reasoning_buffer = []
+                            yield ReasoningStart(id=current_reasoning_id)
+                            reasoning_open = True
+                        reasoning_buffer.append(reasoning)
+                        # 思考链不平滑(不面向打字机手感,内容可能很长,
+                        # 平滑只会拖慢展示);按原块直发
+                        yield ReasoningDelta(
+                            id=current_reasoning_id, delta=reasoning
+                        )
+
                     if not text:
                         continue
+                    # 正文开始:先闭合未关的思考段(顺序:reasoning 在 text 前)
+                    if reasoning_open:
+                        collected_parts.append(
+                            {"type": "reasoning", "text": "".join(reasoning_buffer)}
+                        )
+                        yield ReasoningEnd(id=current_reasoning_id or _new_id())
+                        reasoning_open = False
                     if not text_open:
                         current_text_id = _new_id()
                         text_buffer = []  # 新一轮文本开始,清空缓冲
@@ -155,6 +192,13 @@ async def agent_stream_to_frames(
                         yield TextDelta(id=current_text_id or _new_id(), delta=piece)
 
                 elif kind == "on_tool_start":
+                    if reasoning_open:
+                        # 思考段闭合(工具调用意味着本轮思考结束)
+                        collected_parts.append(
+                            {"type": "reasoning", "text": "".join(reasoning_buffer)}
+                        )
+                        yield ReasoningEnd(id=current_reasoning_id or _new_id())
+                        reasoning_open = False
                     if text_open:
                         # 文本段闭合:把累积的完整文本作为一个 text 部件落库
                         collected_parts.append({"type": "text", "text": "".join(text_buffer)})

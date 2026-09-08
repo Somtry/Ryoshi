@@ -25,6 +25,12 @@ from langchain_core.language_models import BaseChatModel
 
 from ryoshi.config import get_settings
 
+# ChatOpenAI 基类惰性导入(见 _build_model;这里只做类型引用)
+try:  # pragma: no cover - 导入失败仅在未装 langchain-openai 的环境
+    from langchain_openai import ChatOpenAI as _OpenAIModelBase
+except ImportError:  # pragma: no cover
+    _OpenAIModelBase = object  # type: ignore[assignment,misc]
+
 #: 支持的 BYOK provider 列表(顺序即前端设置页的展示顺序)
 BYOK_PROVIDERS = ("openai", "anthropic", "google", "deepseek", "openai-compatible")
 
@@ -353,6 +359,40 @@ async def aget_openai_compatible_meta(
 # ---------------------------------------------------------------------------
 
 
+class ReasoningCapableChatOpenAI(_OpenAIModelBase):
+    """保留 reasoning_content 的 ChatOpenAI 子类。
+
+    背景:langchain-openai(1.6.0)的 _convert_delta_to_message_chunk 只取
+    content/function_call/tool_calls,DeepSeek-R1 等推理模型的
+    delta.reasoning_content 会被静默丢弃——思考链整条链路(帧模型/前端
+    reasoning-section/DB reasoning 列)全部就位,唯独这里断了。
+
+    做法:包一层 _convert_chunk_to_generation_chunk,从原始 chunk dict
+    (LangGraph 事件里拿不到,但转换入口拿得到)把 reasoning_content
+    补进 message.additional_kwargs;下游 chat/stream.py 据此产出
+    reasoning-start/delta/end 帧。
+    """
+
+    def _convert_chunk_to_generation_chunk(
+        self, chunk, default_chunk_class, base_generation_info
+    ):
+        generation = super()._convert_chunk_to_generation_chunk(
+            chunk, default_chunk_class, base_generation_info
+        )
+        if generation is None:
+            return None
+        choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices", [])
+        if not choices:
+            return generation
+        delta = choices[0].get("delta") or {}
+        reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+        if isinstance(reasoning, str) and reasoning:
+            generation.message.additional_kwargs["reasoning_content"] = (
+                generation.message.additional_kwargs.get("reasoning_content", "") + reasoning
+            )
+        return generation
+
+
 def _build_model(
     provider_id: str, model_id: str, creds: ProviderCredentials
 ) -> BaseChatModel:
@@ -360,7 +400,7 @@ def _build_model(
     if provider_id == "openai":
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(model=model_id, api_key=creds.api_key)
+        return ReasoningCapableChatOpenAI(model=model_id, api_key=creds.api_key)
     if provider_id == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -371,17 +411,15 @@ def _build_model(
         return ChatGoogleGenerativeAI(model=model_id, google_api_key=creds.api_key)
     if provider_id == "deepseek":
         # DeepSeek 是 OpenAI 兼容 API:用 ChatOpenAI 改 base_url 即可接入
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
+        # (deepseek-reasoner 的 reasoning_content 经 ReasoningCapable 子类保留)
+        return ReasoningCapableChatOpenAI(
             model=model_id,
             api_key=creds.api_key,
             base_url=creds.base_url or "https://api.deepseek.com",
         )
     if provider_id == "openai-compatible":
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
+        # 通用兼容端点(可能托管 Qwen-R1 等推理模型),同样保留 reasoning
+        return ReasoningCapableChatOpenAI(
             model=model_id,
             api_key=creds.api_key,
             base_url=creds.base_url,

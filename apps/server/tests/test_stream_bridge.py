@@ -164,3 +164,59 @@ class TestAbortPersistence:
         assert handle.get("persisted") is True
         assert len(persisted_messages) == 1  # 恰好持久化一次
         # 路由层兜底条件(persisted=True)不满足 → 不会双写
+
+
+class _ReasoningChunk:
+    """带 reasoning_content 的模型块(DeepSeek-R1 形态)。"""
+
+    def __init__(self, content, reasoning=None):
+        self.content = content
+        self.additional_kwargs = {"reasoning_content": reasoning} if reasoning else {}
+
+
+class ReasoningAgent:
+    """先思考两段,再输出正文,符合推理模型的真实事件序列。"""
+
+    async def astream_events(self, payload, version, config):
+        yield {"event": "on_chat_model_stream", "data": {"chunk": _ReasoningChunk("", "思考第一段 ")}}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": _ReasoningChunk("", "思考第二段")}}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": _ReasoningChunk("正文回答。")}}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": _ReasoningChunk(" 继续。")}}
+
+
+class TestReasoningStream:
+    """推理模型的思考链应产出 reasoning-* 帧并落库为 reasoning 部件。"""
+
+    async def test_思考链先于正文_帧序正确(self):
+        from ryoshi.chat.frames import ReasoningEnd, ReasoningStart
+
+        frames = [
+            f
+            async for f in agent_stream_to_frames(
+                ReasoningAgent(), messages=[], message_id="m1"
+            )
+        ]
+        types = [type(f).__name__ for f in frames]
+        # 思考段:start → reasoning-start → reasoning-delta*2 → reasoning-end
+        assert types[types.index("ReasoningStart") + 1 :].count("ReasoningDelta") == 2
+        assert "ReasoningEnd" in types
+        # 顺序约束:reasoning-start 在 text-start 之前,reasoning-end 在 text-start 之前
+        assert types.index("ReasoningStart") < types.index("TextStart")
+        assert types.index("ReasoningEnd") < types.index("TextStart")
+
+    async def test_思考内容落库为_reasoning_部件_在_text_之前(self):
+        persisted = []
+
+        async def on_persist(msg):
+            persisted.append(msg)
+
+        async for _ in agent_stream_to_frames(
+            ReasoningAgent(), messages=[], on_assistant_message=on_persist
+        ):
+            pass
+
+        parts = persisted[0]["parts"]
+        r_idx = next(i for i, p in enumerate(parts) if p["type"] == "reasoning")
+        t_idx = next(i for i, p in enumerate(parts) if p["type"] == "text")
+        assert parts[r_idx]["text"] == "思考第一段 思考第二段"
+        assert r_idx < t_idx
