@@ -82,7 +82,7 @@ function getExcerpt(content: string) {
   return stripMarkdownText(content).slice(0, 140)
 }
 
-function formatBytes(value: number | null) {
+function formatBytes(value: number | null | undefined) {
   if (!value) return '未知大小'
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
@@ -540,7 +540,7 @@ export function LibraryPanel() {
 
     const target = deleteTarget
     setDeleteTarget(null)
-    startDeleteTransition(async () => {
+    startDeleteTransition(() => { void (async () => {
       const result =
         target.kind === 'note'
           ? await deleteNote(target.item.id)
@@ -579,7 +579,7 @@ export function LibraryPanel() {
       } else {
         removeCachedFile(target.item.id)
       }
-    })
+    })() })
   }
 
   return (

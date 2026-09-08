@@ -73,7 +73,7 @@ class TestDomainResolution:
             return ["203.0.113.1", "10.0.0.7"]  # 多条 A 记录,混入私网
 
         monkeypatch.setattr("ryoshi.netguard._resolve_all_ips", fake_resolve)
-        with pytest.raises(NetGuardError, match="10.0.0.7"):
+        with pytest.raises(NetGuardError, match=r"10\.0\.0\.7"):
             await avalidate_outbound_url("https://evil-rebind.example.com/")
 
     async def test_域名解析到公网IP_放行(self, monkeypatch):

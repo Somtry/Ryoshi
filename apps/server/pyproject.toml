@@ -61,6 +61,15 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = [
+    # B008:函数默认参数里调用函数——FastAPI 的 Depends()/Query() 惯用法,
+    # 全项目大量使用且是官方推荐写法,属于误报。
+    "B008",
+    # E501:行超长——存量主要是 system prompt 字符串与错误消息(中文 prompt
+    # 不宜机械折行,折了会改变 prompt 语义/可读性)。逐行 noqa 难维护,
+    # 统一放宽;新代码仍应尽量守 100 列。
+    "E501",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

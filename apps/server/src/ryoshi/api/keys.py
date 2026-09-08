@@ -66,11 +66,11 @@ def _validate_models_json(models_str: str) -> list[str]:
         if not models_list:
             raise HTTPException(status_code=400, detail="至少选择一个模型")
         return models_list
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=400,
             detail='models 必须是 JSON 数组,如 ["model-a","model-b"]',
-        )
+        ) from exc
 
 
 class KeyUpsertRequest(BaseModel):
@@ -286,8 +286,8 @@ async def discover_models(
 
         try:
             api_key = decrypt_api_key(existing.encrypted_api_key)
-        except CryptoError:
-            raise HTTPException(status_code=400, detail="已保存的密钥无法解密,请重新输入")
+        except CryptoError as exc:
+            raise HTTPException(status_code=400, detail="已保存的密钥无法解密,请重新输入") from exc
 
     # SSRF 防护:校验 base_url
     if provider == "openai-compatible":
@@ -336,22 +336,22 @@ async def discover_models(
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 401:
-                raise HTTPException(status_code=400, detail="API key 无效或已过期")
+                raise HTTPException(status_code=400, detail="API key 无效或已过期") from exc
             raise HTTPException(
                 status_code=400,
                 detail=f"无法获取模型列表: HTTP {exc.response.status_code}",
-            )
+            ) from exc
         except httpx.RequestError as exc:
             # 修复:不泄露底层异常细节(可能包含内部网络信息)
             error_type = type(exc).__name__
             raise HTTPException(
                 status_code=400, detail=f"无法连接到服务端: {error_type}"
-            )
+            ) from exc
 
     try:
         data = resp.json()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="端点返回的不是合法 JSON")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="端点返回的不是合法 JSON") from exc
 
     # 不同 provider 返回格式不同
     raw_models = []

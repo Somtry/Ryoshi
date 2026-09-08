@@ -10,11 +10,14 @@ import { Link as RRLink, type LinkProps as RRLinkProps } from 'react-router-dom'
 
 interface NextLinkProps extends Omit<RRLinkProps, 'to'> {
   href: string
+  /// next/link 特有:子元素自定义 <a>(如按钮)时透传 href;
+  /// RR 的 Link 本就渲染 <a>,这里接收并忽略,不透传给 DOM(RR 不认)。
+  passHref?: boolean
 }
 
 /// 把 next 的 href 映射为 React Router 的 to,其余属性透传。
 const Link = forwardRef<HTMLAnchorElement, NextLinkProps>(function Link(
-  { href, ...rest },
+  { href, passHref: _passHref, ...rest },
   ref
 ) {
   return <RRLink ref={ref} to={href} {...rest} />

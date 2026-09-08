@@ -45,7 +45,7 @@ export function QuestionConfirmation({
   onConfirm,
   isCompleted = false
 }: QuestionConfirmationProps) {
-  const input = (toolInvocation.input || {}) as QuestionInput
+  const input = (toolInvocation.input || {}) as unknown as QuestionInput
   const {
     question = '',
     options = [],

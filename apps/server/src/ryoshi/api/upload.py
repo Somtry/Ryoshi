@@ -104,11 +104,11 @@ async def upload_file(
     # 上传到 S3 兼容存储(标准 PutObject,签名由 aioboto3 处理)
     try:
         import aioboto3
-    except ImportError:
+    except ImportError as exc:
         raise HTTPException(
             status_code=503,
             detail="aioboto3 not installed. Run: uv add aioboto3",
-        )
+        ) from exc
 
     async with aioboto3.Session().client("s3", **_s3_config()) as s3:
         await s3.put_object(

@@ -94,7 +94,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
     setIsAlertOpen(false)
     setIsMenuOpen(false)
 
-    startTransition(async () => {
+    startTransition(() => { void (async () => {
       const result = await deleteChat(chat.id)
 
       if (result?.success) {
@@ -108,7 +108,7 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
       } else {
         toast.error('删除对话时出现意外错误。')
       }
-    })
+    })() })
   }, [chat.id, isActive, router, startTransition])
   const handleMenuOpenChange = useCallback((open: boolean) => {
     setIsMenuOpen(open)

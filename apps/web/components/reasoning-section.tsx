@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-import type { ReasoningPart } from '@ai-sdk/provider-utils'
+import type { ReasoningUIPart } from 'ai'
 
 import { cn } from '@/lib/utils'
 
@@ -93,7 +93,7 @@ export function ReasoningSection({
         </div>
       }
       onInspect={() =>
-        open({ type: 'reasoning', text: content.reasoning } as ReasoningPart)
+        open({ type: 'reasoning', text: content.reasoning } as ReasoningUIPart)
       }
       isLoading={!content.isDone}
       ariaExpanded={isOpen}

@@ -52,9 +52,9 @@ export function ChatHistoryClient() {
 
   useEffect(() => {
     const handleHistoryUpdate = () => {
-      startTransition(async () => {
+      startTransition(() => { void (async () => {
         await fetchInitialChats()
-      })
+      })() })
     }
     window.addEventListener('chat-history-updated', handleHistoryUpdate)
     return () => {

@@ -60,7 +60,7 @@ export function FetchSection({
     displayStatus = 'fetching'
   } else if (fetchResults) {
     // Success state - we have complete output
-    const data = fetchResults as SearchResultsType
+    const data = fetchResults as unknown as SearchResultsType
     if (data?.results?.[0]) {
       displayStatus = 'success'
       title = data.results[0].title

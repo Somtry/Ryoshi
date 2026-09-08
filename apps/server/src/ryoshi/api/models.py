@@ -15,14 +15,13 @@
 
 from fastapi import APIRouter, Header
 
-from ryoshi.agents.models import ProviderCredentials
 from ryoshi.agents.models import (
     ModelConfigError,
+    ProviderCredentials,
     _all_user_credentials,
     _resolve_credentials,
     adefault_model_id,
     aget_openai_compatible_meta,
-    ais_provider_enabled,
     is_provider_enabled,
 )
 from ryoshi.auth import resolve_user

@@ -12,23 +12,17 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
       "@/*": ["./*"],
-      "zod/v4": ["./node_modules/zod"]
+      "zod/v4": ["./node_modules/zod"],
+      // next/* 兼容层:与 vite.config 的 alias 一一对应,让 tsc 也能解析
+      // (Vite 靠 alias 构建,tsc 靠 paths 检查;两边必须保持同步)
+      "next/navigation": ["./lib/next-shim/navigation.ts"],
+      "next/link": ["./lib/next-shim/link.tsx"],
+      "next/image": ["./lib/next-shim/image.tsx"]
     },
     "target": "ES2017"
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
 }

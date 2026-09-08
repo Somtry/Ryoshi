@@ -12,10 +12,13 @@ import { forwardRef, type ImgHTMLAttributes } from 'react'
 interface NextImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   fill?: boolean
   priority?: boolean
+  /// next/image 特有:跳过服务端优化。SPA 降级为原生 <img> 本就无优化,
+  /// 接收并忽略(调用处大量使用,不改组件)。
+  unoptimized?: boolean
 }
 
 const Image = forwardRef<HTMLImageElement, NextImageProps>(function Image(
-  { fill, priority, style, alt = '', ...rest },
+  { fill, priority, unoptimized: _unoptimized, style, alt = '', ...rest },
   ref
 ) {
   // fill 模式:铺满父容器(父需为相对定位),对应 next/image 的 fill 行为

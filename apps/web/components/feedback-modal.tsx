@@ -40,7 +40,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       return
     }
 
-    startTransition(async () => {
+    startTransition(() => { void (async () => {
       const result = await submitFeedback({
         sentiment,
         message: message.trim(),
@@ -56,7 +56,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       } else {
         toast.error('反馈提交失败，请稍后再试。')
       }
-    })
+    })() })
   }
 
   const handleCancel = () => {

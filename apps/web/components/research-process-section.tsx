@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 
-import type { ReasoningPart } from '@ai-sdk/provider-utils'
+import type { ReasoningUIPart } from 'ai'
 import { UseChatHelpers } from '@ai-sdk/react'
 import {
   IconChevronDown as ChevronDown,
@@ -27,10 +27,10 @@ type TextPart = {
   text: string
 }
 
-type MessagePart = ReasoningPart | ToolPart | TextPart | DynamicToolPart
+type MessagePart = ReasoningUIPart | ToolPart | TextPart | DynamicToolPart
 
 // Type guards
-function isReasoningPart(part: MessagePart): part is ReasoningPart {
+function isReasoningPart(part: MessagePart): part is ReasoningUIPart {
   return part.type === 'reasoning'
 }
 

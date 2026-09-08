@@ -11,7 +11,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
-      'zod/v4': 'zod'
+      'zod/v4': 'zod',
+      // 与 vite.config / tsconfig 的 next/* 兼容层保持一致(三处须同步)
+      'next/navigation': path.resolve(__dirname, './lib/next-shim/navigation.ts'),
+      'next/link': path.resolve(__dirname, './lib/next-shim/link.tsx'),
+      'next/image': path.resolve(__dirname, './lib/next-shim/image.tsx')
     }
   },
   test: {

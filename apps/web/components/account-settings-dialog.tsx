@@ -66,7 +66,7 @@ export function AccountSettingsDialog({
     user.user_metadata?.full_name || user.user_metadata?.name || 'User'
 
   const handleDeleteAccount = () => {
-    startDeleteTransition(async () => {
+    startDeleteTransition(() => { void (async () => {
       const result = await deleteAccount()
 
       if (result.success) {
@@ -85,7 +85,7 @@ export function AccountSettingsDialog({
       }
 
       toast.error(result.error ?? '注销账号失败')
-    })
+    })() })
   }
 
   return (

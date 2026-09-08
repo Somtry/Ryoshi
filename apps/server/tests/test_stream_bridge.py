@@ -7,6 +7,8 @@
     无需 API key 即可锁定这层的行为。
 """
 
+import asyncio
+
 from ryoshi.chat.frames import (
     Finish,
     Start,
@@ -104,8 +106,6 @@ class TestAbortPersistence:
             await asyncio.sleep(3600)
 
     async def test_断开时_handle_里有部分消息快照(self):
-        import asyncio
-
         from ryoshi.chat.stream import agent_stream_to_frames
 
         persisted_messages = []
