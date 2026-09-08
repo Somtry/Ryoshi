@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     ryoshi_cloud_deployment: bool = False
     #: 运行环境,影响日志与错误详情是否外露
     environment: str = "development"
+    #: 允许的 CORS 来源(逗号分隔)。默认覆盖本地开发;
+    #: 生产同域部署(nginx 同源反代 /api)不需要跨域,可留默认或改为线上域名。
+    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # ---- 数据库 ----
     #: PostgreSQL 连接串(asyncpg 驱动)

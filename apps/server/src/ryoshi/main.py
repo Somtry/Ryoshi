@@ -58,9 +58,16 @@ def create_app() -> FastAPI:
 
     # CORS:开发期前端在 localhost:3000,后端在 :8000。
     # 允许携带 cookie(模型选择、searchMode 都靠 cookie 记忆)。
+    # 来源清单可配置(ALLOWED_ORIGINS,逗号分隔)——部署到任意域名时
+    # 改环境变量即可,不用动代码;生产同域(nginx 反代 /api)时跨域
+    # 请求根本不会发生,清单留默认也无害。
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[
+            o.strip()
+            for o in get_settings().allowed_origins.split(",")
+            if o.strip()
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
