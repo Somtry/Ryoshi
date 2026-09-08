@@ -240,6 +240,8 @@ function ProviderRow({
   const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([])
   /// 用户勾选的模型 id 列表
   const [selectedModels, setSelectedModels] = useState<string[]>([])
+  /// 手动输入的模型 id(列表拉取之外的补充,如 provider 未列出的新模型)
+  const [manualModelInput, setManualModelInput] = useState('')
 
   // 展开编辑时,若是覆盖已有 key,预填 endpoint 字段(key 本身不回显)
   useEffect(() => {
@@ -311,6 +313,19 @@ function ProviderRow({
         ? prev.filter(id => id !== modelId)
         : [...prev, modelId]
     )
+  }
+
+  /// 手动添加模型 id:provider 的 /models 列表未必包含全部可用模型
+  /// (尤其 openai/anthropic 新模型上线滞后),允许用户直接填 id 追加
+  const handleAddManualModel = () => {
+    const id = manualModelInput.trim()
+    if (!id) return
+    if (selectedModels.includes(id)) {
+      toast.info('该模型已在列表中')
+      return
+    }
+    setSelectedModels(prev => [...prev, id])
+    setManualModelInput('')
   }
 
   const handleSave = async () => {
@@ -500,7 +515,33 @@ function ProviderRow({
               </div>
             )}
 
-            {selectedModels.length > 0 && discoveredModels.length === 0 && (
+            {/* 手动添加模型:provider 列表未覆盖(新模型/灰度模型)时直填 id */}
+            <div className="flex gap-2">
+              <Input
+                value={manualModelInput}
+                onChange={e => setManualModelInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddManualModel()
+                  }
+                }}
+                placeholder="手动添加模型 id（如 gpt-5.2、deepseek-reasoner）"
+                className="h-8 text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={handleAddManualModel}
+                disabled={!manualModelInput.trim()}
+              >
+                添加
+              </Button>
+            </div>
+
+            {selectedModels.length > 0 && (
               <div className="rounded-md border bg-muted/20 p-2 text-xs">
                 <p className="font-medium text-muted-foreground mb-1">
                   已选模型（{selectedModels.length}）：
