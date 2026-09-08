@@ -10,6 +10,8 @@
     响应为 text/event-stream,帧格式严格遵循 packages/protocol/PROTOCOL.md。
 """
 
+import asyncio
+
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -24,6 +26,29 @@ from ryoshi.db.engine import get_session_factory
 from ryoshi.db.persistence import create_chat_with_first_message, upsert_message
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+# 后台兜底持久化任务的引用池:防止 fire-and-forget 任务被 GC 中途取消
+# (asyncio 官方建议的 create_task 模式),任务完成后自动移出。
+_BACKGROUND_PERSIST_TASKS: set[asyncio.Task] = set()
+
+
+def _client_ip(request: Request) -> str | None:
+    """取真实客户端 IP,供访客限流分桶。
+
+    取值优先级(与 uvicorn --proxy-headers 配合):
+      1. X-Forwarded-For 的**最后一个**条目——生产流量经 nginx 反代,
+         nginx 会把 $remote_addr 追加到 XFF 尾部,尾部条目由可信代理写入。
+         注意绝不能取第一个条目:客户端可以自带伪造的 XFF 头,nginx 只追加
+         不清洗,取第一个等于允许攻击者自选限流桶(无限绕过访客配额)。
+      2. request.client.host——裸跑 uvicorn(本地开发)或代理头未启用时的兜底。
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # "client-forged, real-client" → 取末尾、去空白;空段视为无效
+        last = xff.split(",")[-1].strip()
+        if last:
+            return last
+    return request.client.host if request.client else None
 
 
 class TextPart(BaseModel):
@@ -87,7 +112,9 @@ def _extract_user_text(req: ChatRequest) -> str:
             texts.append(p["text"])
         elif ptype == "file" and p.get("url"):
             # 文件附件:把 URL 和类型注入上下文,让模型知道有附件
-            texts.append(f"[附件: {p.get('filename', 'file')} ({p.get('mediaType', '')})]({p['url']})")
+            texts.append(
+                f"[附件: {p.get('filename', 'file')} ({p.get('mediaType', '')})]({p['url']})"
+            )
         elif ptype == "data-pastedContent" and p.get("data"):
             # 粘贴的大段内容
             content = p["data"].get("content", "") if isinstance(p["data"], dict) else ""
@@ -147,7 +174,8 @@ async def chat(
                 allowed_models = [m.strip() for m in creds.models.split(",") if m.strip()]
                 if model_id_part not in allowed_models:
                     raise ModelConfigError(
-                        f"模型 {model_id_part} 不在允许列表中。可用模型: {', '.join(allowed_models)}"
+                        f"模型 {model_id_part} 不在允许列表中。"
+                        f"可用模型: {', '.join(allowed_models)}"
                     )
 
             model_id = req.modelId
@@ -183,7 +211,9 @@ async def chat(
         return JSONResponse(
             status_code=401,
             content={
-                "error": "Sign in to use Adaptive mode. Quick mode remains available without an account.",
+                "error": (
+                    "Sign in to use Adaptive mode. Quick mode remains available without an account."
+                ),
                 "mode": "adaptive",
                 "authRequired": True,
             },
@@ -191,7 +221,7 @@ async def chat(
 
     # 1. 访客限流(未登录时按 IP)
     if user.is_anonymous:
-        client_ip = request.client.host if request.client else None
+        client_ip = _client_ip(request)
         if client_ip:
             guest_result = await check_guest_limit(client_ip)
             if not guest_result.allowed:
@@ -237,7 +267,10 @@ async def chat(
             return JSONResponse(
                 status_code=429,
                 content={
-                    "error": "Daily limit for Adaptive mode reached. Please try again tomorrow, or continue in Quick mode.",
+                    "error": (
+                        "Daily limit for Adaptive mode reached. "
+                        "Please try again tomorrow, or continue in Quick mode."
+                    ),
                     "mode": "adaptive",
                     "remaining": 0,
                     "resetAt": adaptive_result.reset_at,
@@ -271,6 +304,18 @@ async def chat(
                 content={"error": "You do not have permission to write to this chat."},
             )
 
+    # ---- regenerate 清理:删除被替换的旧消息及其后全部消息 ----
+    # AI SDK 前端在本地把消息列表截断到目标消息之前再发请求;后端若不
+    # 同步删除,旧回答留在库里,刷新页面后会"复活"(与前端显示不一致)。
+    # messageId 可能是 assistant 消息(重试回答)或 user 消息(编辑重发)。
+    # 删除必须在 build_model_messages 之前——模型输入的历史从 DB 加载,
+    # 顺序对了被删内容自然不会进入上下文。
+    if req.trigger == "regenerate-message" and req.messageId and req.chatId:
+        from ryoshi.db.persistence import delete_message_and_after
+
+        async with get_session_factory()() as session:
+            await delete_message_and_after(session, req.chatId, req.messageId)
+
     # 按 searchMode 选择智能体:quick(默认)或 adaptive
     if req.searchMode == "adaptive":
         from ryoshi.agents.researcher import create_adaptive_researcher
@@ -295,7 +340,9 @@ async def chat(
                 chat = await load_chat(session, req.chatId)
             if chat:
                 for m in chat["messages"]:
-                    text = "".join(p.get("text", "") for p in m.get("parts", []) if p.get("type") == "text")
+                    text = "".join(
+                        p.get("text", "") for p in m.get("parts", []) if p.get("type") == "text"
+                    )
                     if not text:
                         continue
                     if m["role"] == "user":
@@ -391,6 +438,17 @@ async def chat(
         async with get_session_factory()() as session:
             await upsert_message(session, chat_id, assistant_msg)
 
+    async def _persist_partial(partial: dict) -> None:
+        """兜底持久化(后台任务):中断的回答落库,失败仅记日志。
+
+        闭包捕获的 chat_id / persist_assistant_message 与流内路径完全一致,
+        upsert 幂等(同 id 覆盖),即使与流内持久化竞争也无害。
+        """
+        try:
+            await persist_assistant_message(partial)
+        except Exception as exc:
+            print(f"[ryoshi] 中断回答的兜底持久化失败: {exc}")
+
     async def event_stream():
         # 先落用户消息(失败不阻塞流式,只记日志——历史缺失可容忍,回答必须送达)
         try:
@@ -402,22 +460,43 @@ async def chat(
         # 前端反馈按钮据此关联评分(对应原项目 traceId 贯穿 researcher + title-gen)。
         from ryoshi.observability.tracing import research_trace
 
-        async with research_trace(chat_id or "", user_id, model_id, req.searchMode) as trace_id:
-            metadata: dict = {"searchMode": req.searchMode, "modelId": model_id}
-            if trace_id:
-                metadata["traceId"] = trace_id
+        # 流句柄:客户端断开时,stream 生成器无法在自己的 finally 里持久化
+        # (async generator 被 aclose 后禁止 await),把部分消息快照挂到这里,
+        # 由本函数的 finally 兜底落库。见 chat/stream.py 尾部注释。
+        stream_handle: dict = {}
 
-            frames = agent_stream_to_frames(
-                agent,
-                messages,
-                # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
-                # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
-                message_metadata=metadata,
-                on_assistant_message=persist_assistant_message,
-                max_steps=max_steps,
-            )
-            async for frame in frames:
-                yield encode_frame(frame)
-            yield encode_done()
+        try:
+            async with research_trace(chat_id or "", user_id, model_id, req.searchMode) as trace_id:
+                metadata: dict = {"searchMode": req.searchMode, "modelId": model_id}
+                if trace_id:
+                    metadata["traceId"] = trace_id
+
+                frames = agent_stream_to_frames(
+                    agent,
+                    messages,
+                    # message_id 是 assistant 回答的 id,必须新建;复用 req.message.id
+                    # (用户消息 id)会让前端把用户消息覆盖掉,故这里不传,由流内生成。
+                    message_metadata=metadata,
+                    on_assistant_message=persist_assistant_message,
+                    max_steps=max_steps,
+                    stream_handle=stream_handle,
+                )
+                async for frame in frames:
+                    yield encode_frame(frame)
+                yield encode_done()
+        finally:
+            # 正常/出错路径已由 stream 内部回调持久化(persisted=True);
+            # 客户端断开(点"停止"/网络闪断)时 GeneratorExit/CancelledError
+            # 穿透 async for 走到这里——用快照把"答了一半"的内容落库。
+            # 必须用 create_task 而非 await:本函数也是 async generator,
+            # 断开路径的 finally 里挂起等待会触发
+            # "async generator ignored GeneratorExit" 或被取消作用域二次取消;
+            # 发射一个独立任务不挂起,两种断开路径都成立。
+            partial = stream_handle.get("partial_message")
+            if partial and not stream_handle.get("persisted") and partial["parts"]:
+                task = asyncio.create_task(_persist_partial(partial))
+                # 持引用防 GC(asyncio 官方建议的 fire-and-forget 模式)
+                _BACKGROUND_PERSIST_TASKS.add(task)
+                task.add_done_callback(_BACKGROUND_PERSIST_TASKS.discard)
 
     return StreamingResponse(event_stream(), headers=SSE_HEADERS)

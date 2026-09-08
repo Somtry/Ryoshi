@@ -23,6 +23,7 @@ from ryoshi.api.files import router as files_router
 from ryoshi.api.keys import router as keys_router
 from ryoshi.api.models import router as models_router
 from ryoshi.api.notes import router as notes_router
+from ryoshi.api.relay import router as relay_router
 from ryoshi.api.upload import router as upload_router
 from ryoshi.config import get_settings
 
@@ -74,6 +75,8 @@ def create_app() -> FastAPI:
     app.include_router(feedback_router)
     app.include_router(files_router)
     app.include_router(keys_router)
+    # PostHog 反代(前端 /relay → PostHog US cloud,对应原项目 rewrites)
+    app.include_router(relay_router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

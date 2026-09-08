@@ -167,7 +167,11 @@ def db_parts_to_ui_parts(rows: list[Part]) -> list[dict[str, Any]]:
                 {
                     "type": "reasoning",
                     "text": row.reasoning_text or "",
-                    **({"providerMetadata": row.provider_metadata} if row.provider_metadata else {}),
+                    **(
+                        {"providerMetadata": row.provider_metadata}
+                        if row.provider_metadata
+                        else {}
+                    ),
                 }
             )
         elif t == "file":
@@ -283,6 +287,60 @@ async def check_chat_write_permission(
     if chat is None:
         return True
     return chat.user_id == user_id
+
+
+async def delete_message_and_after(
+    session: AsyncSession, chat_id: str, message_id: str
+) -> int:
+    """删除一条消息及其之后的所有消息(级联删 parts),返回删除的消息数。
+
+    供 regenerate 使用:前端重新生成/编辑某条消息时,AI SDK 在本地把
+    消息列表截断到该消息之前再请求;后端必须做同样的删除,否则被
+    替换的旧消息留在库里,刷新页面后会"复活"。
+
+    语义:message_id 可以是 assistant 消息(重试回答:该回答及其后的
+    全部轮次被删)或 user 消息(编辑重发:该消息及其后全部被删)。
+    消息不属于该会话时不删任何东西(返回 0),防止跨会话误删。
+
+    注意顺序:消息按 created_at 定位"之后",但同一秒内多条消息的
+    created_at 可能相同(server_default 精度问题),因此用
+    (created_at, id) 双键定位,并把同 created_at 的消息全部纳入——
+    宁可多删也不留尾巴(留尾巴=复活 bug 复现)。
+    """
+    target = await session.execute(
+        select(Message).where(
+            Message.id == message_id, Message.chat_id == chat_id
+        )
+    )
+    target_row = target.scalar_one_or_none()
+    if target_row is None:
+        return 0
+
+    # 找出目标及其后的全部消息:created_at 严格大于目标的,加上
+    # created_at 相同但 id 不小于目标的(兜住同秒插入的并发消息;
+    # 该支已包含目标自身)。
+    # 目标自身删除是安全的:AI SDK 前端语义是"截断到该消息之前"——
+    # assistant 目标:截断不含该回答;user 目标:截断含该消息,但
+    # 后续 upsert 会以同 id 重新写入。两种情况下旧内容都不应保留。
+    result = await session.execute(
+        select(Message.id).where(
+            Message.chat_id == chat_id,
+            (Message.created_at > target_row.created_at)
+            | (
+                (Message.created_at == target_row.created_at)
+                & (Message.id >= target_row.id)
+            ),
+        )
+    )
+    ids_to_delete = [row for row in result.scalars().all()]
+    if not ids_to_delete:
+        return 0
+
+    # 按 FK 顺序删:parts → messages
+    await session.execute(delete(Part).where(Part.message_id.in_(ids_to_delete)))
+    await session.execute(delete(Message).where(Message.id.in_(ids_to_delete)))
+    await session.commit()
+    return len(ids_to_delete)
 
 
 async def upsert_message(

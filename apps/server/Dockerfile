@@ -24,4 +24,10 @@ EXPOSE 8000
 
 # 启动前执行数据库迁移,再拉起 uvicorn
 # (ryoshi.main:app 见 apps/server/src/ryoshi/main.py)
-CMD ["/bin/sh", "-c", "cd apps/server && uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn ryoshi.main:app --host 0.0.0.0 --port 8000"]
+#
+# --proxy-headers + --forwarded-allow-ips:生产流量经 nginx 反代,
+# 必须信任代理头(X-Forwarded-For/X-Real-IP),否则 request.client.host
+# 拿到的是 nginx 容器 IP,云端访客限流会把所有匿名用户合进同一个桶
+# (每天 10 次全站共享)。compose 内网只有 nginx 能直达 server,
+# 允许整个内网段信任是安全的。
+CMD ["/bin/sh", "-c", "cd apps/server && uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn ryoshi.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='10.0.0.0/8 172.16.0.0/12 192.168.0.0/16'"]

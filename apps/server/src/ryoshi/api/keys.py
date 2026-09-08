@@ -15,10 +15,7 @@
       支持 OpenAI 兼容端点(DeepSeek、Moonshot、自建 vLLM 等)。
 """
 
-import ipaddress
 import json
-import socket
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -31,6 +28,7 @@ from ryoshi.config import get_settings
 from ryoshi.crypto import CryptoError, encrypt_api_key, mask_api_key
 from ryoshi.db.engine import get_session
 from ryoshi.db.models import UserApiKey
+from ryoshi.netguard import NetGuardError, avalidate_outbound_url
 
 router = APIRouter(prefix="/api/keys", tags=["keys"])
 
@@ -228,88 +226,25 @@ async def upsert_key(
     return _to_summary(existing).model_dump()
 
 
-# 私有/保留 IP 段(SSRF 防护)
-_PRIVATE_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),      # loopback
-    ipaddress.ip_network("10.0.0.0/8"),       # private
-    ipaddress.ip_network("172.16.0.0/12"),    # private
-    ipaddress.ip_network("192.168.0.0/16"),   # private
-    ipaddress.ip_network("169.254.0.0/16"),   # link-local / AWS metadata
-    ipaddress.ip_network("::1/128"),          # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),         # IPv6 private
-    ipaddress.ip_network("fe80::/10"),        # IPv6 link-local
-]
+async def _validate_base_url(base_url: str) -> None:
+    """SSRF 防护:校验 base_url 指向合法的公网 HTTP(S) 端点。
 
-# 危险 host 黑名单
-_BLOCKED_HOSTS = {
-    "localhost",
-    "metadata.google.internal",
-    "metadata.goog",
-}
-
-
-def _validate_base_url(base_url: str) -> None:
-    """SSRF 防护:校验 base_url 指向合法的公网 HTTPS 端点。
-
-    规则:
-      1. 必须是 https://(生产环境);开发环境允许 http://localhost 用于本地测试
-      2. host 不能是私有 IP、loopback、保留地址
-      3. host 不能是黑名单中的危险域名
+    私网/黑名单/DNS 解析检查统一委托 ryoshi.netguard(与 fetch 工具
+    共用同一份清单);这里只补充 BYOK 特有的协议规则:
+    生产环境强制 https(开发环境允许 http)。
     """
     if not base_url:
         raise HTTPException(status_code=400, detail="base_url 不能为空")
 
-    try:
-        parsed = urlparse(base_url)
-    except Exception:
-        raise HTTPException(status_code=400, detail="base_url 格式无效")
-
-    # 协议校验:生产强制 https,开发环境允许 http://localhost
     s = get_settings()
     is_dev = s.environment == "development"
-    if parsed.scheme not in ("https", "http"):
-        raise HTTPException(status_code=400, detail="base_url 必须是 http:// 或 https://")
-    if parsed.scheme == "http" and not is_dev:
+    if base_url.startswith("http://") and not is_dev:
         raise HTTPException(status_code=400, detail="生产环境必须使用 https://")
 
-    host = parsed.hostname
-    if not host:
-        raise HTTPException(status_code=400, detail="base_url 缺少 host")
-
-    # 黑名单检查
-    if host.lower() in _BLOCKED_HOSTS:
-        raise HTTPException(status_code=400, detail="不允许访问该地址")
-
-    # 解析 IP,检查是否在私有段
     try:
-        # 尝试直接解析为 IP
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        # 不是 IP,是域名——做 DNS 解析
-        try:
-            # 获取域名的所有 A/AAAA 记录
-            addrinfo = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            ips = {info[4][0] for info in addrinfo}
-        except socket.gaierror:
-            raise HTTPException(status_code=400, detail=f"无法解析域名: {host}")
-
-        # 检查所有解析结果是否在私有段
-        for ip_str in ips:
-            try:
-                ip = ipaddress.ip_address(ip_str)
-                if any(ip in net for net in _PRIVATE_NETWORKS):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"base_url 指向私有地址({ip_str}),不允许访问",
-                    )
-            except ValueError:
-                continue
-    else:
-        # 直接是 IP 地址
-        if any(ip in net for net in _PRIVATE_NETWORKS):
-            raise HTTPException(
-                status_code=400, detail=f"base_url 指向私有地址({ip}),不允许访问"
-            )
+        await avalidate_outbound_url(base_url)
+    except NetGuardError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/discover-models")
@@ -356,7 +291,7 @@ async def discover_models(
 
     # SSRF 防护:校验 base_url
     if provider == "openai-compatible":
-        _validate_base_url(base_url)
+        await _validate_base_url(base_url)
 
     # 对已知 provider,使用官方端点(不校验,因为 host 是固定的)
     effective_base_url = base_url

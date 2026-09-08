@@ -86,3 +86,81 @@ async def test_工具事件携带正确的_id_与名称():
     out = next(f for f in frames if isinstance(f, ToolOutputAvailable))
     assert start.tool_name == "search"
     assert out.tool_call_id == "call_1"
+
+
+class TestAbortPersistence:
+    """客户端断开时,部分回答应通过 stream_handle 暴露给路由层兜底持久化。"""
+
+    class SlowAgent:
+        """吐两个字就永久挂起(模拟模型慢/长工具执行)。"""
+
+        class _Chunk:
+            def __init__(self, content):
+                self.content = content
+
+        async def astream_events(self, payload, version, config):
+            yield {"event": "on_chat_model_stream", "data": {"chunk": self._Chunk("回答第一段 ")}}
+            # 模拟客户端在此时断开:这个 yield 之后流被 aclose
+            await asyncio.sleep(3600)
+
+    async def test_断开时_handle_里有部分消息快照(self):
+        import asyncio
+
+        from ryoshi.chat.stream import agent_stream_to_frames
+
+        persisted_messages = []
+
+        async def on_persist(msg):
+            persisted_messages.append(msg)
+
+        handle = {}
+        frames = agent_stream_to_frames(
+            TestAbortPersistence.SlowAgent(),
+            messages=[],
+            message_metadata={"searchMode": "quick"},
+            on_assistant_message=on_persist,
+            stream_handle=handle,
+        )
+        # 消费到 step-start 之后的文本增量,然后立即关闭(等价于客户端断开)
+        got = []
+        try:
+            async for frame in frames:
+                got.append(frame)
+                # 拿到第一个文本增量(说明 step-start 已产出)后断开
+                if type(frame).__name__ == "TextDelta":
+                    break
+        finally:
+            await frames.aclose()
+
+        # handle 里应有:部分消息快照(含已产出的部件)+ 未持久化标记
+        partial = handle.get("partial_message")
+        assert partial is not None
+        assert partial["metadata"]["finishReason"] == "aborted"
+        assert handle.get("persisted") is False
+        # parts 至少包含 step-start
+        types = [p.get("type") for p in partial["parts"]]
+        assert "step-start" in types
+        # 正常路径的 on_assistant_message 没被调用(流没走到头)
+        assert persisted_messages == []
+
+    async def test_正常结束_标记已持久化_handle_快照不触发兜底(self):
+        from ryoshi.chat.stream import agent_stream_to_frames
+
+        persisted_messages = []
+
+        async def on_persist(msg):
+            persisted_messages.append(msg)
+
+        handle = {}
+        frames = agent_stream_to_frames(
+            FakeAgent(),
+            messages=[],
+            on_assistant_message=on_persist,
+            stream_handle=handle,
+        )
+        async for _ in frames:
+            pass
+
+        assert handle.get("persisted") is True
+        assert len(persisted_messages) == 1  # 恰好持久化一次
+        # 路由层兜底条件(persisted=True)不满足 → 不会双写
