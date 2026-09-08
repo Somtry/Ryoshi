@@ -42,8 +42,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from ryoshi.db.engine import dispose_db, init_db
 
     init_db()
+    # 共享 httpx 客户端(搜索/抓取/JWKS/relay 的进程级连接池)
+    from ryoshi.http import close_http_client, init_http_client
+
+    init_http_client()
     yield
-    # 关闭阶段:释放数据库连接池
+    # 关闭阶段:释放数据库连接池与 HTTP 连接池
+    await close_http_client()
     await dispose_db()
 
 

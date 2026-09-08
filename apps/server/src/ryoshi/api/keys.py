@@ -28,6 +28,7 @@ from ryoshi.config import get_settings
 from ryoshi.crypto import CryptoError, encrypt_api_key, mask_api_key
 from ryoshi.db.engine import get_session
 from ryoshi.db.models import UserApiKey
+from ryoshi.http import get_http_client
 from ryoshi.netguard import NetGuardError, avalidate_outbound_url
 
 router = APIRouter(prefix="/api/keys", tags=["keys"])
@@ -304,49 +305,49 @@ async def discover_models(
     elif provider == "deepseek":
         effective_base_url = "https://api.deepseek.com"
 
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
-        try:
-            if provider in ("openai", "openai-compatible"):
-                resp = await client.get(
-                    f"{effective_base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-            elif provider == "anthropic":
-                resp = await client.get(
-                    f"{effective_base_url}/v1/models",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-            elif provider == "google":
-                # 修复:改用 header 而非 URL query 传递 API key,避免泄露到日志
-                resp = await client.get(
-                    f"{effective_base_url}/v1beta/models",
-                    headers={"x-goog-api-key": api_key},
-                )
-            elif provider == "deepseek":
-                resp = await client.get(
-                    f"{effective_base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-            else:
-                raise HTTPException(status_code=400, detail=f"不支持的 provider: {provider}")
+    client = get_http_client()
+    try:
+        if provider in ("openai", "openai-compatible"):
+            resp = await client.get(
+                f"{effective_base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+        elif provider == "anthropic":
+            resp = await client.get(
+                f"{effective_base_url}/v1/models",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+            )
+        elif provider == "google":
+            # 修复:改用 header 而非 URL query 传递 API key,避免泄露到日志
+            resp = await client.get(
+                f"{effective_base_url}/v1beta/models",
+                headers={"x-goog-api-key": api_key},
+            )
+        elif provider == "deepseek":
+            resp = await client.get(
+                f"{effective_base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的 provider: {provider}")
 
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 401:
-                raise HTTPException(status_code=400, detail="API key 无效或已过期") from exc
-            raise HTTPException(
-                status_code=400,
-                detail=f"无法获取模型列表: HTTP {exc.response.status_code}",
-            ) from exc
-        except httpx.RequestError as exc:
-            # 修复:不泄露底层异常细节(可能包含内部网络信息)
-            error_type = type(exc).__name__
-            raise HTTPException(
-                status_code=400, detail=f"无法连接到服务端: {error_type}"
-            ) from exc
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            raise HTTPException(status_code=400, detail="API key 无效或已过期") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"无法获取模型列表: HTTP {exc.response.status_code}",
+        ) from exc
+    except httpx.RequestError as exc:
+        # 修复:不泄露底层异常细节(可能包含内部网络信息)
+        error_type = type(exc).__name__
+        raise HTTPException(
+            status_code=400, detail=f"无法连接到服务端: {error_type}"
+        ) from exc
 
     try:
         data = resp.json()

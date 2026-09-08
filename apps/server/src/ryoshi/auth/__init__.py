@@ -101,10 +101,11 @@ async def _fetch_jwks(supabase_url: str, *, force_refresh: bool = False) -> list
 
         url = _jwks_url(supabase_url)
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                keys = resp.json().get("keys", [])
+            from ryoshi.http import get_http_client
+
+            resp = await get_http_client().get(url)
+            resp.raise_for_status()
+            keys = resp.json().get("keys", [])
         except httpx.HTTPError as exc:
             logger.error(f"JWKS fetch failed: {exc}")
             raise AuthError("认证服务暂时不可用,请稍后重试") from exc

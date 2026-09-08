@@ -16,9 +16,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
-
 from ryoshi.config import get_settings
+from ryoshi.http import get_http_client
 
 
 @dataclass
@@ -127,8 +126,8 @@ class TavilySearchProvider(BaseSearchProvider):
             "exclude_domains": exclude_domains,
         }
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(self._ENDPOINT, json=payload)
+        client = get_http_client()
+        resp = await client.post(self._ENDPOINT, json=payload)
         if resp.status_code != 200:
             raise SearchProviderError(
                 f"Tavily API 错误: {resp.status_code}", status=resp.status_code
@@ -198,8 +197,11 @@ class SearXNGSearchProvider(BaseSearchProvider):
         if include_domains:
             params["site"] = ",".join(include_domains)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{settings.searxng_base_url}/search", params=params, headers={"Accept": "application/json"})
+        resp = await get_http_client().get(
+            f"{settings.searxng_base_url}/search",
+            params=params,
+            headers={"Accept": "application/json"},
+        )
         if resp.status_code != 200:
             raise SearchProviderError(f"SearXNG API 错误: {resp.status_code}", status=resp.status_code)
 
@@ -244,8 +246,7 @@ class BraveSearchProvider(BaseSearchProvider):
         if include_domains:
             params["site"] = ",".join(include_domains)
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(self._ENDPOINT, params=params, headers=headers)
+        resp = await get_http_client().get(self._ENDPOINT, params=params, headers=headers)
         if resp.status_code != 200:
             raise SearchProviderError(f"Brave API 错误: {resp.status_code}", status=resp.status_code)
 
@@ -294,8 +295,7 @@ class ExaSearchProvider(BaseSearchProvider):
             payload["excludeDomains"] = exclude_domains
 
         headers = {"x-api-key": settings.exa_api_key, "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(self._ENDPOINT, json=payload, headers=headers)
+        resp = await get_http_client().post(self._ENDPOINT, json=payload, headers=headers)
         if resp.status_code != 200:
             raise SearchProviderError(f"Exa API 错误: {resp.status_code}", status=resp.status_code)
 

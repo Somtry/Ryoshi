@@ -17,9 +17,10 @@
       - 不缓存、不落盘,流式请求(如 session recording)直接透传
 """
 
-import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
+
+from ryoshi.http import get_http_client
 
 router = APIRouter(prefix="/relay", tags=["relay"])
 
@@ -60,13 +61,12 @@ async def relay(request: Request, path: str) -> Response:
         if k.lower() in _FORWARD_REQUEST_HEADERS
     }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        upstream = await client.request(
-            request.method,
-            target,
-            headers=headers,
-            content=await request.body(),
-        )
+    upstream = await get_http_client().request(
+        request.method,
+        target,
+        headers=headers,
+        content=await request.body(),
+    )
 
     # 响应头同样剥 hop-by-hop;其余(如 content-type)透传
     resp_headers = {
