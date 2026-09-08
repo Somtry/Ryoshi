@@ -258,13 +258,19 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
 ## 建议执行批次
 
 ```
-批次 1 · 安全与数据一致性冲刺(1~2 天)     ← 上线前必须完成
+批次 1 · 安全与数据一致性冲刺 ✅ 已完成(2026-09-08)
   P0-1 → P0-2 → P0-3 → P0-4 → P0-5
 
-批次 2 · 稳定与质量冲刺(2~3 天)
+批次 2 · 稳定与质量冲刺 ✅ 已完成(2026-09-08)
   P1-3(清零)→ P1-4(CI 固化)→ P1-2 → P1-6
   → P1-1 → P1-7 → P1-5
-  (P1-3 必须先于 P1-4,其余顺序灵活)
+  实施备注:
+  - P1-1 根因比预想深:langchain-openai 1.6.0 会丢弃流式 delta 的
+    reasoning_content,需 ReasoningCapableChatOpenAI 子类在转换钩子
+    里补回;帧产出与落库已就绪(6 条单测锁定)
+  - P1-7 后端能力本已齐全,补的是前端"手动添加模型 id"入口
+  - P1-5 修复真 bug:缓存写入 key 用 results.query(源会改写)导致
+    永不命中,改为 query_override
 
 批次 3 · 体验跃升冲刺(约 1 周)
   P2-1(多模态)→ P2-2(标题)→ P2-3(Generative UI)
@@ -295,3 +301,4 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
 |---|---|
 | 2026-09-08 | 初版,基于全项目代码审查 |
 | 2026-09-08 | P0 全部完成(分支 `fix/p0-stage`):5 项修复落地,新增 41 条单测(总 57),改动文件 ruff 全绿;详见各项「实施结果」 |
+| 2026-09-08 | 批次 2(P1)全部完成(分支 `feat/p1-stage`):7 项落地——质量债清零(ruff 83→0 / tsc 63→0)、CI 流水线、CORS 可配置、httpx 共享连接池、reasoning 思考链全链路打通、BYOK 手动模型 id、Redis 搜索缓存(含写入 key 错位 bug 修复)。测试 57→67;详见各项「实施结果」 |
