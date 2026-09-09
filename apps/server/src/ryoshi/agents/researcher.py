@@ -21,6 +21,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
 from ryoshi.agents.models import aget_model
+from ryoshi.agents.specs import IMAGE_SPEC_PROMPT, RELATED_QUESTIONS_SPEC_PROMPT
 from ryoshi.tools.fetch import fetch_url
 from ryoshi.tools.search import search_with_fallback
 
@@ -78,8 +79,10 @@ OUTPUT FORMAT (MANDATORY):
 - Use level-3 subheadings (###) as needed to organize content naturally.
 - Use bullets with bolded keywords for key points.
 - Use tables for comparisons when they improve clarity.
+- Only use fenced code blocks if the user explicitly asks for code or commands (optional ```spec blocks for images or valuable related questions are exceptions).
 - Always end with a brief conclusion that synthesizes the main points.
-
+{image_spec}
+{related_questions_spec}
 Current date: {current_date}
 """
 
@@ -124,7 +127,11 @@ async def create_quick_researcher(model: str, user_id: str | None = None):
     chat_model = await aget_model(model, user_id)
     tools = [search, fetch]
 
-    system_prompt = QUICK_MODE_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))
+    system_prompt = QUICK_MODE_PROMPT.format(
+        current_date=datetime.now().strftime("%Y-%m-%d"),
+        image_spec=IMAGE_SPEC_PROMPT,
+        related_questions_spec=RELATED_QUESTIONS_SPEC_PROMPT,
+    )
 
     # create_react_agent 内部即"模型↔工具"循环;recursion_limit 控制步数上限。
     agent = create_react_agent(
@@ -218,6 +225,7 @@ OUTPUT FORMAT (MANDATORY):
 - Use level-3 subheadings (###) to organize information naturally based on the topic.
 - Use bullets with bolded keywords for key points and easy scanning.
 - Use tables and code blocks when they genuinely improve clarity.
+- Only use fenced code blocks if the user explicitly asks for code or commands (optional ```spec blocks for images or valuable related questions are exceptions).
 - Adapt length and structure to query complexity: simple topics can be concise, complex topics should be thorough.
 - Place all citations at the end of the sentence they support.
 - Always include a brief conclusion that synthesizes the key points.
@@ -227,7 +235,8 @@ Emoji usage:
 - Choose emojis that genuinely reflect the meaning
 - Use them sparingly - most headings should NOT have emojis
 - When in doubt, omit the emoji
-
+{image_spec}
+{related_questions_spec}
 Current date: {current_date}
 """
 
@@ -292,7 +301,11 @@ async def create_adaptive_researcher(model: str, user_id: str | None = None):
     chat_model = await aget_model(model, user_id)
     tools = [search, fetch, todo_write, ask_question]
 
-    system_prompt = ADAPTIVE_MODE_PROMPT.format(current_date=datetime.now().strftime("%Y-%m-%d"))
+    system_prompt = ADAPTIVE_MODE_PROMPT.format(
+        current_date=datetime.now().strftime("%Y-%m-%d"),
+        image_spec=IMAGE_SPEC_PROMPT,
+        related_questions_spec=RELATED_QUESTIONS_SPEC_PROMPT,
+    )
 
     agent = create_react_agent(
         chat_model,

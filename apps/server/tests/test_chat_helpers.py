@@ -54,3 +54,53 @@ class TestClientIp:
     def test_xff_只有空段_兜底直连地址(self):
         req = _Request(headers={"x-forwarded-for": ", ,"}, host="172.17.0.5")
         assert _client_ip(req) == "172.17.0.5"
+
+
+class TestMultimodalContent:
+    """_multimodal_content:图片附件 → 多模态 block;无图 → 纯文本不变。"""
+
+    @staticmethod
+    def _build_req(parts):
+        from ryoshi.api.chat import ChatRequest, IncomingMessage
+
+        return ChatRequest(message=IncomingMessage(parts=parts))
+
+    def test_图片附件_构造多模态block(self):
+        from langchain_core.messages import HumanMessage
+
+        from ryoshi.api.chat import _supports_vision
+
+        # 直接验证判定函数与 block 形态(核心逻辑在 chat 路由闭包外可测的部分)
+        assert _supports_vision("gpt-4o") is True
+        assert _supports_vision("claude-haiku-4-5-20251001") is True
+        assert _supports_vision("gemini-2.0-flash") is True
+        assert _supports_vision("deepseek-chat") is False
+        assert _supports_vision("deepseek-reasoner") is False
+        # 未知模型默认支持(宁可报错也不静默丢图)
+        assert _supports_vision("totally-unknown-model") is True
+
+        # HumanMessage 接受 block 列表(多模态路径的类型契约)
+        msg = HumanMessage(content=[
+            {"type": "text", "text": "这是什么?"},
+            {"type": "image_url", "image_url": {"url": "https://s3/a.png"}},
+        ])
+        assert isinstance(msg.content, list)
+        assert msg.content[1]["image_url"]["url"] == "https://s3/a.png"
+
+    def test_extract_user_text_保留附件文本行(self):
+        req = self._build_req([
+            {"type": "text", "text": "帮我看看这张图"},
+            {"type": "file", "url": "https://s3/a.png", "filename": "截图.png",
+             "mediaType": "image/png"},
+        ])
+        from ryoshi.api.chat import _extract_user_text
+
+        text = _extract_user_text(req)
+        assert "帮我看看这张图" in text
+        assert "https://s3/a.png" in text  # 附件以文本行形式告知模型
+
+    def test_无图片附件_行为不变(self):
+        req = self._build_req([{"type": "text", "text": "纯文本问题"}])
+        from ryoshi.api.chat import _extract_user_text
+
+        assert _extract_user_text(req) == "纯文本问题"

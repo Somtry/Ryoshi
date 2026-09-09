@@ -100,6 +100,33 @@ class ChatRequest(BaseModel):
     messages: list[IncomingMessage] = []
 
 
+# 已知"不支持图片输入"的模型名模式(小写子串匹配)。
+# 判定策略:已知不支持 → 降级;已知支持 → 放行;未知名 → 放行
+# (新模型大多支持视觉,且 API 报错比静默丢图更诚实)。
+_NO_VISION_PATTERNS = (
+    "deepseek-chat",       # DeepSeek V 系列文本模型(reasoner 同样不支持图)
+    "deepseek-reasoner",
+    "gpt-4o-mini-audio",   # 音频变体
+    "o1-mini",             # 纯文本推理模型
+    "text-embedding",      # embedding 系(防御性)
+)
+
+_VISION_PATTERNS = (
+    "gpt-4o", "gpt-4.1", "gpt-5", "gpt-4-turbo",
+    "claude-3", "claude-4", "claude-opus", "claude-sonnet", "claude-haiku",
+    "gemini-",  # Gemini 全系原生多模态
+    "qwen-vl", "qwen2-vl", "qvq", "glm-4v",
+)
+
+
+def _supports_vision(model_name: str) -> bool:
+    """按模型名判断是否支持图片输入(启发式清单,未知默认支持)。"""
+    name = model_name.lower()
+    if any(p in name for p in _NO_VISION_PATTERNS):
+        return False
+    return True
+
+
 def _extract_user_text(req: ChatRequest) -> str:
     """从消息 parts 抽出纯文本(拼接 text 部件 + 文件引用 + 数据部件中的文本)。"""
     if not req.message:
@@ -330,6 +357,49 @@ async def chat(
     from ryoshi.chat.context_window import get_max_allowed_tokens, truncate_messages
     from ryoshi.db.persistence import load_chat
 
+    def _multimodal_content(text: str, parts: list[dict] | None):
+        """把当前用户消息构造成模型 content:有图片附件时输出多模态 block 列表。
+
+        LangChain 的 {"type": "image_url", "image_url": {"url": ...}} 是
+        标准多模态形态,openai/anthropic/google 各家客户端会自动归一成
+        自己的 API 格式(anthropic 的 base64/source、google 的 file_data)。
+        只处理"当前这条消息"的附件:历史轮次的图片重新喂入意义有限
+        (追问通常围绕最新图片),且旧消息的 file url 可能已过期。
+
+        注意 _extract_user_text 已把附件写成 "[附件: xxx](url)" 文本行,
+        多模态 block 与它并存:文本行让模型知道附件的存在与文件名,
+        image_url block 让模型真正"看到"图片内容。
+
+        视觉能力检测:不支持图片的模型(如 deepseek-chat)收到
+        image_url block 会直接 API 报错。按模型名模式判断(BYOK 自定义
+        id 无法穷举,宁可保守:未知名默认尝试发送——多数新模型支持,
+        失败时错误信息也远比静默丢弃友好)。
+        """
+        image_parts = [
+            p for p in (parts or [])
+            if p.get("type") == "file"
+            and str(p.get("mediaType", "")).startswith("image/")
+            and p.get("url")
+        ]
+        if not image_parts:
+            return text  # 无图片附件:维持纯文本,行为与之前完全一致
+
+        model_name = model_id.split(":", 1)[1] if ":" in model_id else model_id
+        if not _supports_vision(model_name):
+            # 降级:模型看不了图,给明确文本说明而非 API 报错
+            names = ", ".join(str(p.get("filename", "图片")) for p in image_parts)
+            hint = f"\n\n[系统提示:当前模型不支持图片输入,用户上传了 {len(image_parts)} 张图片({names})但无法查看。请如实告知这一限制。]"
+            return text + hint
+
+        blocks: list[dict] = []
+        if text:
+            blocks.append({"type": "text", "text": text})
+        blocks.extend(
+            {"type": "image_url", "image_url": {"url": p["url"]}}
+            for p in image_parts
+        )
+        return blocks
+
     async def build_model_messages() -> list:
         """组装传给智能体的 LangChain 消息列表(含历史,已截断)。"""
         from langchain_core.messages import AIMessage, HumanMessage
@@ -350,8 +420,11 @@ async def chat(
                     elif m["role"] == "assistant":
                         history.append(AIMessage(content=text))
 
-        # 当前用户消息放最后
-        history.append(HumanMessage(content=user_text))
+        # 当前用户消息放最后;带图片附件时构造多模态 content
+        current_parts = req.message.parts if req.message else None
+        history.append(
+            HumanMessage(content=_multimodal_content(user_text, current_parts))
+        )
 
         # 上下文窗口截断(对应原项目 truncateMessages)
         model_name = model_id.split(":", 1)[1] if ":" in model_id else model_id
@@ -449,6 +522,17 @@ async def chat(
         except Exception as exc:
             print(f"[ryoshi] 中断回答的兜底持久化失败: {exc}")
 
+    async def _maybe_refresh_title() -> None:
+        """新会话首答完成后,后台生成 LLM 标题(对应原项目 title-generator)。
+
+        fire-and-forget:不阻塞 SSE;失败保留首条消息截断的兜底标题。
+        """
+        if not (req.isNewChat and chat_id and user_text.strip()):
+            return
+        from ryoshi.agents.title import refresh_chat_title
+
+        await refresh_chat_title(chat_id, user_text, model_id, byok_user_id)
+
     async def event_stream():
         # 先落用户消息(失败不阻塞流式,只记日志——历史缺失可容忍,回答必须送达)
         try:
@@ -484,6 +568,13 @@ async def chat(
                 async for frame in frames:
                     yield encode_frame(frame)
                 yield encode_done()
+
+            # 新会话:回答已落库,后台生成 LLM 标题(fire-and-forget,
+            # 与兜底持久化共用引用池防 GC)。放 finally 之外——只在
+            # 正常完成时触发,中断/出错的会话保留兜底标题即可。
+            title_task = asyncio.create_task(_maybe_refresh_title())
+            _BACKGROUND_PERSIST_TASKS.add(title_task)
+            title_task.add_done_callback(_BACKGROUND_PERSIST_TASKS.discard)
         finally:
             # 正常/出错路径已由 stream 内部回调持久化(persisted=True);
             # 客户端断开(点"停止"/网络闪断)时 GeneratorExit/CancelledError
