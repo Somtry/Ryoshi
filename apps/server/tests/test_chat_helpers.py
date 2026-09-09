@@ -7,7 +7,7 @@
     绝不取第一个(客户端可伪造)。
 """
 
-from ryoshi.api.chat import _client_ip
+from ryoshi.ratelimit import client_ip_from_request as _client_ip
 
 
 class _Client:

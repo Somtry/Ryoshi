@@ -32,23 +32,8 @@ router = APIRouter(prefix="/api", tags=["chat"])
 _BACKGROUND_PERSIST_TASKS: set[asyncio.Task] = set()
 
 
-def _client_ip(request: Request) -> str | None:
-    """取真实客户端 IP,供访客限流分桶。
-
-    取值优先级(与 uvicorn --proxy-headers 配合):
-      1. X-Forwarded-For 的**最后一个**条目——生产流量经 nginx 反代,
-         nginx 会把 $remote_addr 追加到 XFF 尾部,尾部条目由可信代理写入。
-         注意绝不能取第一个条目:客户端可以自带伪造的 XFF 头,nginx 只追加
-         不清洗,取第一个等于允许攻击者自选限流桶(无限绕过访客配额)。
-      2. request.client.host——裸跑 uvicorn(本地开发)或代理头未启用时的兜底。
-    """
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        # "client-forged, real-client" → 取末尾、去空白;空段视为无效
-        last = xff.split(",")[-1].strip()
-        if last:
-            return last
-    return request.client.host if request.client else None
+# 真实客户端 IP 提取见 ratelimit.client_ip_from_request(XFF 取末位条目,
+# 首位可被客户端伪造;裸跑时回退 request.client.host)
 
 
 class TextPart(BaseModel):
@@ -248,7 +233,9 @@ async def chat(
 
     # 1. 访客限流(未登录时按 IP)
     if user.is_anonymous:
-        client_ip = _client_ip(request)
+        from ryoshi.ratelimit import client_ip_from_request
+
+        client_ip = client_ip_from_request(request)
         if client_ip:
             guest_result = await check_guest_limit(client_ip)
             if not guest_result.allowed:

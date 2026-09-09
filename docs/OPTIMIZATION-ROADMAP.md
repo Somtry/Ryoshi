@@ -272,9 +272,16 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
   - P1-5 修复真 bug:缓存写入 key 用 results.query(源会改写)导致
     永不命中,改为 query_override
 
-批次 3 · 体验跃升冲刺(约 1 周)
+批次 3 · 体验跃升冲刺 ✅ 已完成(2026-09-09)
   P2-1(多模态)→ P2-2(标题)→ P2-3(Generative UI)
   → P2-4(PDF)→ P2-5(限流补齐)
+  实施备注:
+  - P2-1 带视觉能力检测:不支持图片的模型(deepseek-chat 等)降级为
+    文本说明而非 API 报错;未知名默认放行
+  - P2-4 双路径:Jina Reader 在部分网络(如国内)不可达,加 pypdf
+    本地解析兜底(下载也走 SSRF 校验+重定向),真机验证 arxiv 成功
+  - P2-5 顺带把 IP 提取统一到 ratelimit.client_ip_from_request
+    (原 chat.py 私有函数迁出共用)
 
 批次 4 · 打磨(按需)
   P3-* 任意穿插;P3-7 建议跟在批次 2 的 P1-7 后顺手做
@@ -302,3 +309,4 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
 | 2026-09-08 | 初版,基于全项目代码审查 |
 | 2026-09-08 | P0 全部完成(分支 `fix/p0-stage`):5 项修复落地,新增 41 条单测(总 57),改动文件 ruff 全绿;详见各项「实施结果」 |
 | 2026-09-08 | 批次 2(P1)全部完成(分支 `feat/p1-stage`):7 项落地——质量债清零(ruff 83→0 / tsc 63→0)、CI 流水线、CORS 可配置、httpx 共享连接池、reasoning 思考链全链路打通、BYOK 手动模型 id、Redis 搜索缓存(含写入 key 错位 bug 修复)。测试 57→67;详见各项「实施结果」 |
+| 2026-09-09 | 批次 3(P2)全部完成(分支 `feat/p2-stage`):多模态图片输入、LLM 会话标题、Generative UI spec、PDF 双路径抓取、feedback/upload 限流。测试 67→80 |

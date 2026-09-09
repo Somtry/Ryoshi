@@ -71,6 +71,24 @@ def _today_key() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
+def client_ip_from_request(request) -> str | None:
+    """从 FastAPI Request 提取真实客户端 IP(限流分桶用)。
+
+    取值优先级(与 uvicorn --proxy-headers 配合):
+      1. X-Forwarded-For 的**最后一个**条目——生产流量经 nginx 反代,
+         nginx 会把 $remote_addr 追加到 XFF 尾部,尾部条目由可信代理写入。
+         注意绝不能取第一个条目:客户端可以自带伪造的 XFF 头,nginx 只追加
+         不清洗,取第一个等于允许攻击者自选限流桶(无限绕过访客配额)。
+      2. request.client.host——裸跑 uvicorn(本地开发)时的兜底。
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        last = xff.split(",")[-1].strip()
+        if last:
+            return last
+    return request.client.host if request.client else None
+
+
 @dataclass
 class RateLimitResult:
     """限流检查结果。"""
@@ -128,11 +146,25 @@ GUEST_DAILY_LIMIT = 10
 USER_DAILY_LIMIT = 100
 #: Adaptive 模式每日上限(对应原项目 ADAPTIVE_CHAT_DAILY_LIMIT,默认 30)
 ADAPTIVE_DAILY_LIMIT = 30
+#: 站点/消息反馈每日上限(防灌库;反馈本就是低频动作)
+FEEDBACK_DAILY_LIMIT = 10
+#: 文件上传每日上限(防 S3 存储账单攻击;正常使用远低于此)
+UPLOAD_DAILY_LIMIT = 50
 
 
 async def check_guest_limit(ip: str) -> RateLimitResult:
     """访客限流:按 IP,每天 10 次。"""
     return await _check_limit("guest:chat", ip, GUEST_DAILY_LIMIT)
+
+
+async def check_feedback_limit(ip: str) -> RateLimitResult:
+    """反馈限流:按 IP,每天 10 次。防匿名灌反馈写库。"""
+    return await _check_limit("feedback", ip, FEEDBACK_DAILY_LIMIT)
+
+
+async def check_upload_limit(ip: str) -> RateLimitResult:
+    """上传限流:按 IP,每天 50 次。防匿名刷 5MB 文件进 S3。"""
+    return await _check_limit("upload", ip, UPLOAD_DAILY_LIMIT)
 
 
 async def check_overall_chat_limit(user_id: str) -> RateLimitResult:

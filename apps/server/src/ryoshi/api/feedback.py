@@ -11,6 +11,7 @@
     匿名也可提交;消息级反馈需要 traceId(关联 Langfuse trace)。
 """
 
+import time
 import uuid
 from typing import Literal
 
@@ -61,6 +62,19 @@ async def submit_feedback(
     - 消息级反馈: {traceId, score, messageId} → 写 feedback 表
       (sentiment 由 score 映射: 1→positive, -1→negative)
     """
+    # 限流(仅云端部署生效):按 IP 每天 10 次,防匿名灌反馈写库
+    from ryoshi.ratelimit import check_feedback_limit, client_ip_from_request
+
+    client_ip = client_ip_from_request(request)
+    if client_ip:
+        result = await check_feedback_limit(client_ip)
+        if not result.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="反馈提交过于频繁,请明天再试。",
+                headers={"Retry-After": str(max(1, result.reset_at - int(time.time())))},
+            )
+
     body = await request.json()
 
     # 消息级反馈:有 traceId + score

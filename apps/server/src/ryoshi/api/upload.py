@@ -13,7 +13,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ryoshi.auth import resolve_user
@@ -69,6 +69,7 @@ def _object_key(user_id: str, chat_id: str, filename: str) -> str:
 
 @router.post("/upload")
 async def upload_file(
+    request: Request,
     file: UploadFile,
     chatId: str = Form(...),
     authorization: str | None = Header(None),
@@ -83,6 +84,18 @@ async def upload_file(
     # 认证:ENABLE_AUTH=false 时匿名;ENABLE_AUTH=true 时校验 JWT
     user = await resolve_user(authorization, allow_anonymous_fallback=True)
     user_id = user.id
+
+    # 限流(仅云端部署生效):按 IP 每天 50 次,防匿名刷 5MB 文件进 S3
+    from ryoshi.ratelimit import check_upload_limit, client_ip_from_request
+
+    client_ip = client_ip_from_request(request)
+    if client_ip:
+        limit_result = await check_upload_limit(client_ip)
+        if not limit_result.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="上传过于频繁,请明天再试。",
+            )
 
     if not _is_storage_configured():
         raise HTTPException(
