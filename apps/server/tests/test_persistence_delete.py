@@ -123,3 +123,40 @@ async def test_同秒消息_一并纳入删除(db):
         deleted = await delete_message_and_after(session, "c6", "m2")
     assert deleted == 2
     assert await _remaining_ids(db, "c6") == ["m1"]
+
+
+class TestExportChat:
+    """导出拼装语义:load_chat 的 parts 数据能还原为可读文档。"""
+
+    async def test_导出内容_含用户与回答与来源(self, db):
+        base_time = datetime(2026, 9, 8, 12, 0, 0)
+        async with db() as session:
+            session.add(Chat(id="c-export", title="导出测试", user_id="u1", visibility="private"))
+            session.add(Message(id="mu", chat_id="c-export", role="user", created_at=base_time))
+            session.add(Part(message_id="mu", order=0, type="text", text_text="什么是 Rust?"))
+            session.add(Message(id="ma", chat_id="c-export", role="assistant", created_at=base_time + timedelta(minutes=1)))
+            session.add(Part(message_id="ma", order=0, type="text", text_text="Rust 是系统编程语言。"))
+            session.add(
+                Part(
+                    message_id="ma", order=1, type="source-url",
+                    source_url_source_id="s1", source_url_url="https://rust-lang.org",
+                    source_url_title="Rust 官网",
+                )
+            )
+            await session.commit()
+
+        async with db() as session:
+            chat = await load_chat(session, "c-export", user_id="u1")
+        assert chat is not None
+        # 拼装(与路由端点同构)
+        doc_parts: list[str] = []
+        for m in chat["messages"]:
+            for p in m.get("parts", []):
+                if p.get("type") == "text":
+                    doc_parts.append(p["text"])
+                elif p.get("type") == "source-url":
+                    doc_parts.append(f"[{p.get('title')}]({p['url']})")
+        doc = "\n".join(doc_parts)
+        assert "什么是 Rust?" in doc
+        assert "Rust 是系统编程语言。" in doc
+        assert "https://rust-lang.org" in doc

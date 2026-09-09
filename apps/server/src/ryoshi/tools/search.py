@@ -12,12 +12,15 @@
     所以本文件先只实现这条路径;general/视频/图片搜索在阶段 4 补齐。
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
 from ryoshi.config import get_settings
 from ryoshi.http import get_http_client
+
+logger = logging.getLogger("ryoshi.search")
 
 
 @dataclass
@@ -451,7 +454,7 @@ async def _search_with_fallback_inner(
             last_error = exc
             if not _is_recoverable(exc):
                 raise  # 4xx 等不可恢复,直接抛
-            print(f"[ryoshi] 搜索源 {name} 失败({exc}),尝试降级")
+            logger.warning("搜索源 %s 失败(%s),尝试降级", name, exc)
             continue
 
     raise SearchProviderError(f"所有搜索源均失败: {last_error}")

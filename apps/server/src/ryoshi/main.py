@@ -10,10 +10,12 @@
     保持这个入口"一眼能看完"。
 """
 
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ryoshi.api.chat import router as chat_router
@@ -27,6 +29,31 @@ from ryoshi.api.relay import router as relay_router
 from ryoshi.api.upload import router as upload_router
 from ryoshi.config import get_settings
 
+logger = logging.getLogger("ryoshi")
+
+
+def _configure_ryoshi_logger() -> None:
+    """把 ryoshi.* logger 挂上 uvicorn 同款输出。
+
+    uvicorn 的默认 LOGGING_CONFIG 只配置 uvicorn.* 三个 logger;
+    其他 logger 传播到 root 后无 handler,INFO 会被 Python 的
+    lastResort(WARNING 级)吞掉。这里给 ryoshi 加 StreamHandler,
+    与 uvicorn 输出同去 stdout,格式对齐;重复调用幂等(dev reload)。
+    """
+    if logger.handlers:  # reload 场景已配置
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        logging.Formatter("%(levelname)s:     %(name)s - %(message)s")
+    )
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    # 不向 root 传播(避免双写)
+    logger.propagate = False
+
+
+_configure_ryoshi_logger()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -37,7 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     settings = get_settings()
     # 启动日志:让开发者第一眼确认关键开关状态(不打印密钥本身)
-    print(f"[ryoshi] 环境={settings.environment} 认证={'开' if settings.enable_auth else '关(匿名)'}")
+    logger.info(
+        "环境=%s 认证=%s workers=%s",
+        settings.environment,
+        "开" if settings.enable_auth else "关(匿名)",
+        "多进程(见启动参数)" if settings.environment != "development" else "单进程(dev)",
+    )
     # 初始化数据库连接池(Neon / 本地 Postgres)
     from ryoshi.db.engine import dispose_db, init_db
 
@@ -89,6 +121,27 @@ def create_app() -> FastAPI:
     app.include_router(keys_router)
     # PostHog 反代(前端 /relay → PostHog US cloud,对应原项目 rewrites)
     app.include_router(relay_router)
+
+    # 请求访问日志:方法/路径/状态/耗时(排障刚需;跳过 /health 探活刷屏)。
+    # 用中间件而非 uvicorn access-log:格式统一进 ryoshi logger,且能带耗时。
+    @app.middleware("http")
+    async def access_log(request: Request, call_next):
+        if request.url.path == "/health":
+            return await call_next(request)
+        start = time.perf_counter()
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        # SSE 流式响应的"耗时"是首字节时间(响应头返回即计时结束),
+        # 真实流时长看业务日志,这里标注 stream 提示阅读者。
+        logger.info(
+            "%s %s -> %s (%.1fms%s)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+            ", stream" if response.headers.get("content-type", "").startswith("text/event-stream") else "",
+        )
+        return response
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

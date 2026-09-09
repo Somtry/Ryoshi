@@ -20,6 +20,27 @@ export default defineConfig({
   // 环境变量从 monorepo 根目录加载(与后端共用同一个 .env.local),
   // 而不是默认的 apps/web 目录。Vite 只会暴露 VITE_* 前缀变量给浏览器。
   envDir: path.resolve(__dirname, '../..'),
+  build: {
+    rollupOptions: {
+      output: {
+        // 手动分包:主 chunk 曾达 2.3MB(gzip 702KB),首屏全部串行加载。
+        // 拆分原则:低频变更的大体积依赖独立成 chunk,浏览器可长期缓存
+        // (业务代码迭代时这些 chunk 的 hash 不变,命中缓存零下载)。
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('katex')) return 'katex' // 数学渲染(含字体外的 JS)
+            if (id.includes('@tabler')) return 'icons' // 图标库(named import 已 tree-shake,仍占可观体积)
+            if (id.includes('@radix-ui')) return 'radix' // 无障碍交互原语(全家桶)
+            if (id.includes('streamdown') || id.includes('shiki') || id.includes('highlight.js'))
+              return 'markdown' // Markdown/代码高亮渲染器(重且低频变更)
+            if (id.includes('react') || id.includes('scheduler')) return 'react-vendor'
+            if (id.includes('@ai-sdk') || id.includes('/ai/') || id.includes('zod'))
+              return 'ai-sdk'
+          }
+        }
+      }
+    }
+  },
   resolve: {
     alias: {
       '@': __dirname,

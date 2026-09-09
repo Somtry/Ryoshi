@@ -13,22 +13,41 @@ from __future__ import annotations
 from typing import Any
 
 # ---- 模型上下文窗口配置(与原项目 MODEL_CONTEXT_WINDOWS 对应)----
-# 只列 Ryoshi 实际支持的模型;未知模型用默认值。
+# 前缀匹配:按最长前缀命中(BYOK 自定义 id 如 gpt-5.2-mini 不必逐一登记)。
+# 清单覆盖常见模型;未知模型走 DEFAULT(见下)。
 MODEL_CONTEXT_WINDOWS: dict[str, dict[str, int]] = {
-    # DeepSeek(OpenAI 兼容端点)
-    "deepseek-v4-flash": {"contextWindow": 128000, "outputTokens": 16384},
-    "deepseek-v4-pro": {"contextWindow": 128000, "outputTokens": 16384},
-    "deepseek-chat": {"contextWindow": 128000, "outputTokens": 16384},
-    # OpenAI
-    "gpt-4o-mini": {"contextWindow": 128000, "outputTokens": 16384},
-    # Anthropic
-    "claude-haiku-4-5-20251001": {"contextWindow": 200000, "outputTokens": 8192},
-    # Google
-    "gemini-2.0-flash": {"contextWindow": 1048576, "outputTokens": 65536},
+    # DeepSeek(OpenAI 兼容端点;V3/R1 系列 128k)
+    "deepseek": {"contextWindow": 128000, "outputTokens": 16384},
+    # OpenAI(GPT-4o/4.1/5 系均为 128k+ 输入;输出上限 16k~32k)
+    "gpt-4o": {"contextWindow": 128000, "outputTokens": 16384},
+    "gpt-4.1": {"contextWindow": 1047576, "outputTokens": 32768},
+    "gpt-4-turbo": {"contextWindow": 128000, "outputTokens": 4096},
+    "gpt-5": {"contextWindow": 400000, "outputTokens": 32768},
+    "o1": {"contextWindow": 200000, "outputTokens": 32768},
+    "o3": {"contextWindow": 200000, "outputTokens": 100000},
+    "o4": {"contextWindow": 200000, "outputTokens": 100000},
+    # Anthropic(Claude 3.5 起 200k;4 系 sonnet 1M 可选、默认 200k)
+    "claude-3": {"contextWindow": 200000, "outputTokens": 8192},
+    "claude-4": {"contextWindow": 200000, "outputTokens": 16384},
+    "claude-opus": {"contextWindow": 200000, "outputTokens": 16384},
+    "claude-sonnet": {"contextWindow": 200000, "outputTokens": 16384},
+    "claude-haiku": {"contextWindow": 200000, "outputTokens": 8192},
+    # Google(Gemini 1.5/2.x 全系 1M)
+    "gemini": {"contextWindow": 1048576, "outputTokens": 65536},
+    # Qwen(开源系常见;qwen2.5/qwen3 128k)
+    "qwen": {"contextWindow": 128000, "outputTokens": 8192},
+    # GLM
+    "glm": {"contextWindow": 128000, "outputTokens": 8192},
+    # Kimi(Moonshot;长上下文是卖点)
+    "moonshot": {"contextWindow": 128000, "outputTokens": 8192},
+    "kimi": {"contextWindow": 128000, "outputTokens": 8192},
 }
 
-DEFAULT_CONTEXT_WINDOW = 16384
-DEFAULT_OUTPUT_TOKENS = 4096
+# 未知模型的默认窗口:2026 年在售模型几乎都是 128k 起步,旧默认 16k
+# 会把长对话过早截断(用户明明还有余量却丢了上下文)。128k 是安全下限
+# ——即使真实窗口更小,超限错误由 provider 返回,比静默截断可诊断。
+DEFAULT_CONTEXT_WINDOW = 128000
+DEFAULT_OUTPUT_TOKENS = 8192
 # 安全缓冲:预留给 system prompt 与格式化开销
 SAFETY_BUFFER_RATIO = 0.1
 
@@ -50,12 +69,33 @@ def _get_encoder(model_id: str):
     return _ENCODER_CACHE["cl100k_base"]
 
 
+def _lookup_window(model_id: str) -> dict[str, int]:
+    """查模型的窗口配置:精确命中 → 最长前缀命中 → 默认值。
+
+    前缀匹配让 BYOK 自定义 id(gpt-5.2-mini、claude-sonnet-4-6 等)
+    不必逐一登记也能拿到正确量级;多个前缀都命中时取更长者
+    (如 "gpt-4o-mini" 同时命中 "gpt-4o" 与更泛的 "gpt-",取具体的)。
+    """
+    if model_id in MODEL_CONTEXT_WINDOWS:
+        return MODEL_CONTEXT_WINDOWS[model_id]
+    name = model_id.lower()
+    best: dict[str, int] | None = None
+    best_len = -1
+    for prefix, info in MODEL_CONTEXT_WINDOWS.items():
+        if name.startswith(prefix) and len(prefix) > best_len:
+            best = info
+            best_len = len(prefix)
+    if best is not None:
+        return best
+    return {
+        "contextWindow": DEFAULT_CONTEXT_WINDOW,
+        "outputTokens": DEFAULT_OUTPUT_TOKENS,
+    }
+
+
 def get_max_allowed_tokens(model_id: str) -> int:
     """计算某模型允许的最大输入 token 数(上下文窗口 - 输出预留 - 安全缓冲)。"""
-    info = MODEL_CONTEXT_WINDOWS.get(
-        model_id,
-        {"contextWindow": DEFAULT_CONTEXT_WINDOW, "outputTokens": DEFAULT_OUTPUT_TOKENS},
-    )
+    info = _lookup_window(model_id)
     available = info["contextWindow"] - info["outputTokens"]
     available -= int(info["contextWindow"] * SAFETY_BUFFER_RATIO)
     return max(available, 1000)

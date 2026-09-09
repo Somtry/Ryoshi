@@ -258,6 +258,14 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
 ## 建议执行批次
 
 ```
+批次 4 · 打磨 ✅ 已完成(2026-09-09)
+  P3-1(chunk 拆分:主 chunk 2244KB→480KB)→ P3-2(多 worker,
+  WORKERS 环境变量可调)→ P3-3(SSE 心跳 15s)→ P3-7(窗口表
+  前缀匹配 + 未知默认 128k)→ P3-5(logging + 访问日志中间件)→
+  P3-6(pre-commit 配置)→ P3-4(模型实例缓存 5min TTL,换 key
+  指纹失效)→ P3-8(导出 API:md/json)
+  P3-1 成果:manualChunks 六分组,主 chunk -79%,大依赖长期缓存
+
 批次 1 · 安全与数据一致性冲刺 ✅ 已完成(2026-09-08)
   P0-1 → P0-2 → P0-3 → P0-4 → P0-5
 
@@ -310,3 +318,4 @@ Dockerfile CMD 加 `--workers 2`(或按 CPU);tiktoken 编码是 CPU-bound,单 wo
 | 2026-09-08 | P0 全部完成(分支 `fix/p0-stage`):5 项修复落地,新增 41 条单测(总 57),改动文件 ruff 全绿;详见各项「实施结果」 |
 | 2026-09-08 | 批次 2(P1)全部完成(分支 `feat/p1-stage`):7 项落地——质量债清零(ruff 83→0 / tsc 63→0)、CI 流水线、CORS 可配置、httpx 共享连接池、reasoning 思考链全链路打通、BYOK 手动模型 id、Redis 搜索缓存(含写入 key 错位 bug 修复)。测试 57→67;详见各项「实施结果」 |
 | 2026-09-09 | 批次 3(P2)全部完成(分支 `feat/p2-stage`):多模态图片输入、LLM 会话标题、Generative UI spec、PDF 双路径抓取、feedback/upload 限流。测试 67→80 |
+| 2026-09-09 | 批次 4(P3)全部完成(分支 `feat/p3-stage`):chunk 拆分(-79%)、多 worker、SSE 心跳、窗口表前缀匹配、logging+访问日志、pre-commit、模型实例缓存、导出 API。测试 80→90。**路线图全部完成** |

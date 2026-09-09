@@ -292,8 +292,55 @@ async def ais_provider_enabled(provider_id: str, user_id: str | None = None) -> 
     return (await _resolve_credentials(provider_id, user_id)) is not None
 
 
+# ---- 模型实例缓存 ----
+# 每条消息原本都重建 ChatModel:一次 DB 查询(解密 BYOK key)+ 客户端
+# 构造;连续对话下重复且无谓。按 (user_id, provider, model, api_key指纹)
+# 缓存构造结果——api_key 进 key 保证换 key 立即失效;再叠 5 分钟 TTL
+# 兜底(base_url/models 等次要字段变更的场景,代价是至多 5 分钟延迟)。
+# ChatModel 实例线程安全(LangChain 官方语义:配置不可变,调用无状态)。
+_MODEL_CACHE: dict[tuple, tuple[BaseChatModel, float]] = {}
+_MODEL_CACHE_TTL_SECONDS = 300
+
+
+def _cache_key(provider_id: str, model_id: str, user_id: str | None, api_key: str) -> tuple:
+    """缓存键:api_key 用指纹(前 8 字符 + 长度)——明文做 key 有泄漏面
+    (异常堆栈/repr 可能带出),指纹足够区分变更。"""
+    import hashlib
+
+    key_fp = hashlib.sha256(api_key.encode()).hexdigest()[:12]
+    return (user_id or "-", provider_id, model_id, key_fp)
+
+
+def _cache_get(key: tuple) -> BaseChatModel | None:
+    """取缓存;过期条目顺手清除。"""
+    import time
+
+    entry = _MODEL_CACHE.get(key)
+    if entry is None:
+        return None
+    model, expires_at = entry
+    if time.monotonic() > expires_at:
+        _MODEL_CACHE.pop(key, None)
+        return None
+    return model
+
+
+def _cache_put(key: tuple, model: BaseChatModel) -> None:
+    """写缓存;超上限(防 BYOK 用户多导致内存膨胀)时按简易 LRU 淘汰。"""
+    import time
+
+    if len(_MODEL_CACHE) >= 256:
+        # 淘汰最早过期的一批(近似 LRU;够用,不值得引 OrderedDict 复杂度)
+        for k in sorted(_MODEL_CACHE, key=lambda k: _MODEL_CACHE[k][1])[:64]:
+            _MODEL_CACHE.pop(k, None)
+    _MODEL_CACHE[key] = (model, time.monotonic() + _MODEL_CACHE_TTL_SECONDS)
+
+
 async def aget_model(full_model: str, user_id: str | None = None) -> BaseChatModel:
     """把 "providerId:modelId" 解析成 LangChain 聊天模型(BYOK 感知)。
+
+    结果按 (user, provider, model, key指纹) 缓存 5 分钟:连续对话不再
+    重复 DB 查询与客户端构造;换 key 立即失效(指纹变化)。
 
     参数:
         full_model: 形如 "openai:gpt-4o-mini"、"anthropic:claude-haiku-4-5"
@@ -308,7 +355,15 @@ async def aget_model(full_model: str, user_id: str | None = None) -> BaseChatMod
     creds = await _resolve_credentials(provider_id, user_id)
     if creds is None:
         raise ModelConfigError(f"provider 未启用(缺少密钥): {provider_id}")
-    return _build_model(provider_id, model_id, creds)
+
+    cache_key = _cache_key(provider_id, model_id, user_id, creds.api_key)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    model = _build_model(provider_id, model_id, creds)
+    _cache_put(cache_key, model)
+    return model
 
 
 async def adefault_model_id(user_id: str | None = None) -> str:

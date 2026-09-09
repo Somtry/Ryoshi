@@ -11,6 +11,7 @@
 """
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,6 +27,8 @@ from ryoshi.db.engine import get_session_factory
 from ryoshi.db.persistence import create_chat_with_first_message, upsert_message
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+logger = logging.getLogger("ryoshi.chat")
 
 # 后台兜底持久化任务的引用池:防止 fire-and-forget 任务被 GC 中途取消
 # (asyncio 官方建议的 create_task 模式),任务完成后自动移出。
@@ -507,7 +510,7 @@ async def chat(
         try:
             await persist_assistant_message(partial)
         except Exception as exc:
-            print(f"[ryoshi] 中断回答的兜底持久化失败: {exc}")
+            logger.error("中断回答的兜底持久化失败: %s", exc)
 
     async def _maybe_refresh_title() -> None:
         """新会话首答完成后,后台生成 LLM 标题(对应原项目 title-generator)。
@@ -525,7 +528,7 @@ async def chat(
         try:
             await persist_user_message()
         except Exception as exc:
-            print(f"[ryoshi] 用户消息持久化失败: {exc}")
+            logger.error("用户消息持久化失败: %s", exc)
 
         # Langfuse trace:整个研究过程包在一个 trace 里,traceId 写入消息 metadata,
         # 前端反馈按钮据此关联评分(对应原项目 traceId 贯穿 researcher + title-gen)。
@@ -552,7 +555,21 @@ async def chat(
                     max_steps=max_steps,
                     stream_handle=stream_handle,
                 )
-                async for frame in frames:
+                # 帧循环带心跳:adaptive 模式的长搜索(30s 超时)期间流上
+                # 零字节,nginx/云 LB 的空闲超时会掐连接。每 15s 无帧时发
+                # 一行 SSE 注释(": keepalive\n\n" 冒号开头,客户端按规范
+                # 忽略,不影响消息解析),让中间层认定连接活跃。
+                frame_iter = frames.__aiter__()
+                while True:
+                    try:
+                        frame = await asyncio.wait_for(
+                            frame_iter.__anext__(), timeout=15.0
+                        )
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    except StopAsyncIteration:
+                        break
                     yield encode_frame(frame)
                 yield encode_done()
 

@@ -30,4 +30,10 @@ EXPOSE 8000
 # 拿到的是 nginx 容器 IP,云端访客限流会把所有匿名用户合进同一个桶
 # (每天 10 次全站共享)。compose 内网只有 nginx 能直达 server,
 # 允许整个内网段信任是安全的。
-CMD ["/bin/sh", "-c", "cd apps/server && uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn ryoshi.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='10.0.0.0/8 172.16.0.0/12 192.168.0.0/16'"]
+#
+# --workers:多进程分摊。tiktoken 编码与 prompt 组装是 CPU-bound,
+# 单 worker 会卡 event loop(SSE 流期间其他请求排队);2 个 worker
+# 对中小规模部署够用,可按 CPU 上调(模块级单例 JWKS/Redis/PostHog
+# 均为"每 worker 一份"模式,多进程安全;SSE 连接粘在单个 worker 上,
+# 无跨进程状态)。WORKERS 环境变量可覆盖。
+CMD ["/bin/sh", "-c", "cd apps/server && uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn ryoshi.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-2} --proxy-headers --forwarded-allow-ips='10.0.0.0/8 172.16.0.0/12 192.168.0.0/16'"]
