@@ -6,8 +6,8 @@
 
     原项目有两种抓取类型:
       regular —— 直接 HTTP 抓 HTML 并提取正文(快,适用于大多数网页)
-      api     —— 走 Jina Reader / Tavily Extract(用于 PDF 与 JS 渲染页)
-    Quick 模式默认且仅用 regular,这里先实现这条路径;api 路径在阶段 4 补。
+      api     —— 走 Jina Reader(用于 PDF 与 JS 渲染页)
+    两条路径都已实现:URL 形态/响应头判定为 PDF 时自动切 Jina。
 
     HTML 正文提取:原项目用 jsdom + Readability。Python 侧用标准库 html.parser
     做"去标签留文本"的轻量提取——对 Quick 模式"拿到正文喂给模型"的目标足够,
@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ryoshi.netguard import resolve_safe_address
+from ryoshi.netguard import avalidate_outbound_url, resolve_safe_address
 
 # 正文长度上限(与原项目 CONTENT_CHARACTER_LIMIT 一致,超出截断)
 CONTENT_CHARACTER_LIMIT = 8000
@@ -91,8 +91,8 @@ def _extract_title(html: str) -> str:
 async def fetch_url(url: str) -> FetchResult:
     """抓取一个 URL 并提取正文。
 
-    只支持 HTML / 纯文本;遇到 PDF 等其他类型抛错(Quick 模式下
-    智能体的 prompt 已被告知 PDF 要用 api 类型,而 api 路径在阶段 4 实现)。
+    HTML/纯文本直接抓取;PDF 走 Jina Reader(r.jina.ai,免费无 key,
+    返回 Markdown 文本)。对应原项目 fetch 工具的 api 路径。
 
     SSRF:先经 netguard 解析并校验目标 IP,再以该 IP 直连(见模块头说明)。
     重定向逐跳手动跟随,每一跳都重新过 netguard——自动跟随会让攻击者用
@@ -102,6 +102,10 @@ async def fetch_url(url: str) -> FetchResult:
     split = urlsplit(url)
     if split.scheme not in ("http", "https"):
         raise ValueError(f"不支持的协议: {split.scheme or '(空)'}(仅允许 http/https)")
+
+    # URL 以 .pdf 结尾或带 pdf 查询参数的,直接走 Jina(省一次无效的 HTML 抓取)
+    if _looks_like_pdf(url):
+        return await _fetch_via_jina(url)
 
     current_url = url
     # 手动跟随重定向(每跳重新校验);正常站点 5 跳足够
@@ -130,6 +134,10 @@ async def fetch_url(url: str) -> FetchResult:
     content_type = (resp.headers.get("content-type") or "").lower()
     body = resp.text
 
+    if "application/pdf" in content_type:
+        # 响应头声明 PDF(但 URL 没带 .pdf 后缀的场景):改走 Jina
+        return await _fetch_via_jina(current_url)
+
     if "text/html" in content_type or "application/xhtml" in content_type:
         extractor = _TextExtractor()
         extractor.feed(body)
@@ -146,6 +154,111 @@ async def fetch_url(url: str) -> FetchResult:
         text = text[:CONTENT_CHARACTER_LIMIT] + "...[truncated]"
 
     return FetchResult(url=current_url, title=title, text=text)
+
+
+def _looks_like_pdf(url: str) -> bool:
+    """URL 形态初筛:.pdf 后缀(忽略查询串)或常见 PDF 站点参数。"""
+    from urllib.parse import urlsplit as _us
+
+    path = _us(url).path.lower()
+    if path.endswith(".pdf"):
+        return True
+    return ".pdf" in _us(url).query.lower()
+
+
+# Jina Reader:免费无 key,GET https://r.jina.ai/<url> 返回页面的 Markdown 文本。
+# 目标是固定域名(非用户可控的代理目标),不构成 SSRF 面;
+# 但 URL 本身仍先过 netguard(抓内网 PDF 同样被拒)。
+_JINA_READER_BASE = "https://r.jina.ai/"
+
+
+async def _fetch_via_jina(url: str) -> FetchResult:
+    """经 Jina Reader 抓取 PDF(或 JS 渲染页)正文。
+
+    Jina 不可达(部分网络环境到不了 r.jina.ai)时降级为本地
+    pypdf 解析:自己下载 PDF 字节流(仍过 SSRF 校验直连)后抽文本。
+    两条路都失败才抛 ValueError 给智能体。
+    """
+    # 目标 URL 仍需 SSRF 校验:Jina 会替我们抓,但内网地址不该经它转述
+    await avalidate_outbound_url(url)
+
+    from ryoshi.http import get_http_client
+
+    try:
+        resp = await get_http_client().get(
+            f"{_JINA_READER_BASE}{url}",
+            headers={"Accept": "text/plain", "User-Agent": "Ryoshi/0.1 (+fetch)"},
+        )
+        if resp.status_code == 200:
+            text = resp.text
+            # Jina 返回 Markdown,首个标题行可当 title
+            title = ""
+            for line in text.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("# "):
+                    title = stripped[2:].strip()
+                    break
+            if len(text) > CONTENT_CHARACTER_LIMIT:
+                text = text[:CONTENT_CHARACTER_LIMIT] + "...[truncated]"
+            return FetchResult(url=url, title=title, text=text)
+    except httpx.HTTPError:
+        pass  # Jina 不可达 → 走本地兜底
+
+    return await _fetch_pdf_local(url)
+
+
+async def _fetch_pdf_local(url: str) -> FetchResult:
+    """本地 PDF 解析兜底:下载字节流(校验过的 IP 直连)+ pypdf 抽文本。
+
+    质量弱于 Jina(纯文本流,无排版结构),但在 r.jina.ai 不可达的
+    网络环境仍能作答;PDF 里的扫描图(纯图片页)抽不出文本时如实报错。
+    """
+    ip, port = await resolve_safe_address(url)
+    async with httpx.AsyncClient(
+        timeout=60,  # PDF 可能较大
+        headers={"User-Agent": "Ryoshi/0.1 (+fetch)"},
+    ) as client:
+        # 与 HTML 路径同样:手动跟重定向,每跳重新过 SSRF 校验
+        current_url = url
+        for _ in range(6):
+            ip, port = await resolve_safe_address(current_url)
+            resp = await _get_bound(client, current_url, ip, port)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location")
+                if not location:
+                    break
+                from urllib.parse import urljoin
+
+                current_url = urljoin(current_url, location)
+                continue
+            break
+    if resp.status_code != 200:
+        raise ValueError(f"PDF 下载失败: HTTP {resp.status_code}")
+
+    import io
+
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(io.BytesIO(resp.content))
+        pages = [page.extract_text() or "" for page in reader.pages]
+        text = "\n\n".join(p for p in pages if p.strip())
+    except Exception as exc:
+        raise ValueError(f"PDF 解析失败: {type(exc).__name__}") from exc
+
+    if not text.strip():
+        raise ValueError("PDF 中没有可提取的文本(可能是扫描件/纯图片 PDF)")
+
+    title = ""
+    try:
+        meta_title = (reader.metadata or {}).get("/Title") if reader.metadata else None
+        if meta_title:
+            title = str(meta_title).strip()
+    except Exception:
+        pass
+    if len(text) > CONTENT_CHARACTER_LIMIT:
+        text = text[:CONTENT_CHARACTER_LIMIT] + "...[truncated]"
+    return FetchResult(url=url, title=title, text=text)
 
 
 async def _get_bound(
