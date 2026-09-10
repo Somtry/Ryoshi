@@ -1,5 +1,5 @@
 /** @type {import('prettier').Config} */
-module.exports = {
+export default {
   endOfLine: 'lf',
   semi: false,
   useTabs: false,

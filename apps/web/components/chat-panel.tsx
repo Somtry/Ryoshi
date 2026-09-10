@@ -935,11 +935,7 @@ export function ChatPanel({
                   (!hasPendingInput && !isLoading) || !hasAvailableModels
                 }
                 onClick={isLoading ? stop : undefined}
-                title={
-                  hasAvailableModels
-                    ? undefined
-                    : '当前没有可用的模型'
-                }
+                title={hasAvailableModels ? undefined : '当前没有可用的模型'}
               >
                 {isLoading ? (
                   <Square className="size-4 md:size-5" />

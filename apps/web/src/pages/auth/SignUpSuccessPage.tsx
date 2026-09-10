@@ -1,6 +1,12 @@
 /// 注册成功页。对应原 app/auth/sign-up-success/page.tsx。
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card'
 
 export default function SignUpSuccessPage() {
   return (

@@ -50,9 +50,7 @@ export function UpdatePasswordForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">设置新密码</CardTitle>
-          <CardDescription>
-            请在下方输入你的新密码。
-          </CardDescription>
+          <CardDescription>请在下方输入你的新密码。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleForgotPassword}>

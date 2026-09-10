@@ -11,15 +11,17 @@ repos:
         args: [--fix]
         files: ^apps/server/
 
-  # ---- 前端:Prettier(components/lib/hooks/src 下)----
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  # ---- 前端:Prettier(用项目本地安装的版本,language: system)----
+  # 说明:mirrors-prettier 的独立环境在 pnpm + "type":"module" 项目下
+  # 会误判模块类型(module is not defined),改为直接调 apps/web 里的
+  # node_modules/.bin/prettier,与项目版本一致。
+  - repo: local
     hooks:
-      - id: prettier
+      - id: prettier-web
         name: prettier (web)
+        entry: apps/web/node_modules/.bin/prettier --write
+        language: system
         files: ^apps/web/(components|lib|hooks|src)/.*\.(ts|tsx|css)$
-        additional_dependencies:
-          - prettier@3.4.2
 
   # ---- 通用:大文件/合并冲突标记/私钥泄漏 ----
   - repo: https://github.com/pre-commit/pre-commit-hooks

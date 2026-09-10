@@ -540,46 +540,48 @@ export function LibraryPanel() {
 
     const target = deleteTarget
     setDeleteTarget(null)
-    startDeleteTransition(() => { void (async () => {
-      const result =
-        target.kind === 'note'
-          ? await deleteNote(target.item.id)
-          : await deleteFile(target.item.id)
-      if (!result.success) {
-        captureClient(
+    startDeleteTransition(() => {
+      void (async () => {
+        const result =
           target.kind === 'note'
-            ? 'note_delete_failed'
-            : 'library_file_delete_failed',
-          {
-            itemId: target.item.id,
-            reason: result.error ?? 'unknown'
-          }
-        )
-        toast.error(result.error ?? '删除失败')
-        return
-      }
+            ? await deleteNote(target.item.id)
+            : await deleteFile(target.item.id)
+        if (!result.success) {
+          captureClient(
+            target.kind === 'note'
+              ? 'note_delete_failed'
+              : 'library_file_delete_failed',
+            {
+              itemId: target.item.id,
+              reason: result.error ?? 'unknown'
+            }
+          )
+          toast.error(result.error ?? '删除失败')
+          return
+        }
 
-      captureClient(
-        target.kind === 'note' ? 'note_deleted' : 'library_file_deleted',
-        { itemId: target.item.id }
-      )
-      toast.success(
-        target.kind === 'note' ? '笔记已删除' : '文件已从知识库移除'
-      )
-      if (target.kind === 'note' && selectedNote?.id === target.item.id) {
-        setSelectedNote(null)
-      } else if (
-        target.kind === 'file' &&
-        selectedFile?.id === target.item.id
-      ) {
-        setSelectedFile(null)
-      }
-      if (target.kind === 'note') {
-        removeCachedNote(target.item.id)
-      } else {
-        removeCachedFile(target.item.id)
-      }
-    })() })
+        captureClient(
+          target.kind === 'note' ? 'note_deleted' : 'library_file_deleted',
+          { itemId: target.item.id }
+        )
+        toast.success(
+          target.kind === 'note' ? '笔记已删除' : '文件已从知识库移除'
+        )
+        if (target.kind === 'note' && selectedNote?.id === target.item.id) {
+          setSelectedNote(null)
+        } else if (
+          target.kind === 'file' &&
+          selectedFile?.id === target.item.id
+        ) {
+          setSelectedFile(null)
+        }
+        if (target.kind === 'note') {
+          removeCachedNote(target.item.id)
+        } else {
+          removeCachedFile(target.item.id)
+        }
+      })()
+    })
   }
 
   return (
@@ -786,8 +788,7 @@ export function LibraryPanel() {
                     }
 
                     const note = libraryItem.item
-                    const title =
-                      stripMarkdownTitle(note.title) || '无标题笔记'
+                    const title = stripMarkdownTitle(note.title) || '无标题笔记'
                     return (
                       <div
                         key={`note-${note.id}`}

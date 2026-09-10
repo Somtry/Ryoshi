@@ -17,7 +17,9 @@ import { Chat } from '@/components/chat'
 import { useAuthCheck } from '@/hooks/use-auth-check'
 
 export default function HomePage() {
-  const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+  const [modelSelectorData, setModelSelectorData] = useState<
+    ModelSelectorData | undefined
+  >()
   const { isGuest, libraryAvailable } = useAuthCheck()
 
   useEffect(() => {
@@ -32,7 +34,8 @@ export default function HomePage() {
     // BYOK 配置保存后刷新模型列表
     const handleByokUpdate = () => fetchModels()
     window.addEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
-    return () => window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
+    return () =>
+      window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
   }, [])
 
   return (

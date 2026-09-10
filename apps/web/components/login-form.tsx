@@ -67,9 +67,7 @@ export function LoginForm({
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(
-        error instanceof Error ? error.message : '第三方登录出错'
-      )
+      setError(error instanceof Error ? error.message : '第三方登录出错')
     } finally {
       setIsLoading(false)
     }

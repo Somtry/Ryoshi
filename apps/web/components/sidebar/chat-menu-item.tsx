@@ -94,21 +94,23 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
     setIsAlertOpen(false)
     setIsMenuOpen(false)
 
-    startTransition(() => { void (async () => {
-      const result = await deleteChat(chat.id)
+    startTransition(() => {
+      void (async () => {
+        const result = await deleteChat(chat.id)
 
-      if (result?.success) {
-        toast.success('对话已删除')
-        if (isActive) {
-          router.push('/')
+        if (result?.success) {
+          toast.success('对话已删除')
+          if (isActive) {
+            router.push('/')
+          }
+          window.dispatchEvent(new CustomEvent('chat-history-updated'))
+        } else if (result?.error) {
+          toast.error(result.error)
+        } else {
+          toast.error('删除对话时出现意外错误。')
         }
-        window.dispatchEvent(new CustomEvent('chat-history-updated'))
-      } else if (result?.error) {
-        toast.error(result.error)
-      } else {
-        toast.error('删除对话时出现意外错误。')
-      }
-    })() })
+      })()
+    })
   }, [chat.id, isActive, router, startTransition])
   const handleMenuOpenChange = useCallback((open: boolean) => {
     setIsMenuOpen(open)

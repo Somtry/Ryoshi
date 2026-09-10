@@ -9,7 +9,10 @@ import type { UIMessage } from '@/lib/types/ai'
  * toolCallId → {序号: 搜索结果} 的映射。锁定其行为。
  */
 
-const makeSearchPart = (toolCallId: string, results: Array<{ title: string; url: string; content: string }>) => ({
+const makeSearchPart = (
+  toolCallId: string,
+  results: Array<{ title: string; url: string; content: string }>
+) => ({
   type: 'tool-search' as const,
   toolCallId,
   state: 'output-available' as const,
@@ -44,8 +47,14 @@ describe('extractCitationMaps', () => {
 
     const maps = extractCitationMaps(message)
     expect(maps['call_1']).toBeDefined()
-    expect(maps['call_1'][1]).toMatchObject({ title: '结果一', url: 'https://a.com' })
-    expect(maps['call_1'][2]).toMatchObject({ title: '结果二', url: 'https://b.com' })
+    expect(maps['call_1'][1]).toMatchObject({
+      title: '结果一',
+      url: 'https://a.com'
+    })
+    expect(maps['call_1'][2]).toMatchObject({
+      title: '结果二',
+      url: 'https://b.com'
+    })
   })
 
   it('无搜索部件时返回空映射', () => {

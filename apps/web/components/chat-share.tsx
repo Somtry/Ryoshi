@@ -40,8 +40,7 @@ export function ChatShare({ chatId, className }: ChatShareProps) {
     const result = await shareChat(chatId)
     if (!result.success || !result.shareId) {
       toast.error(
-        result.error ??
-          '分享失败，你可能需要登录，或只能分享自己创建的对话。'
+        result.error ?? '分享失败，你可能需要登录，或只能分享自己创建的对话。'
       )
       return
     }

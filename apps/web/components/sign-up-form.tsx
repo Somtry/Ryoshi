@@ -81,9 +81,7 @@ export function SignUpForm({
             <IconLogo className="size-12" />
             注册账号
           </CardTitle>
-          <CardDescription>
-            填写以下信息即可开始使用
-          </CardDescription>
+          <CardDescription>填写以下信息即可开始使用</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>

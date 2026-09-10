@@ -66,26 +66,28 @@ export function AccountSettingsDialog({
     user.user_metadata?.full_name || user.user_metadata?.name || 'User'
 
   const handleDeleteAccount = () => {
-    startDeleteTransition(() => { void (async () => {
-      const result = await deleteAccount()
+    startDeleteTransition(() => {
+      void (async () => {
+        const result = await deleteAccount()
 
-      if (result.success) {
-        try {
-          await createClient().auth.signOut()
-        } catch (error) {
-          console.error('Failed to clear client session:', error)
+        if (result.success) {
+          try {
+            await createClient().auth.signOut()
+          } catch (error) {
+            console.error('Failed to clear client session:', error)
+          }
+
+          toast.success('账号已注销')
+          setConfirmOpen(false)
+          onOpenChange(false)
+          router.push('/')
+          router.refresh()
+          return
         }
 
-        toast.success('账号已注销')
-        setConfirmOpen(false)
-        onOpenChange(false)
-        router.push('/')
-        router.refresh()
-        return
-      }
-
-      toast.error(result.error ?? '注销账号失败')
-    })() })
+        toast.error(result.error ?? '注销账号失败')
+      })()
+    })
   }
 
   return (
@@ -103,9 +105,7 @@ export function AccountSettingsDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>账户</DialogTitle>
-          <DialogDescription>
-            管理你的账号偏好和数据。
-          </DialogDescription>
+          <DialogDescription>管理你的账号偏好和数据。</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6">
@@ -154,9 +154,7 @@ export function AccountSettingsDialog({
 
           <section className="grid gap-3">
             <div className="grid gap-1">
-              <h3 className="text-sm font-medium text-destructive">
-                注销账号
-              </h3>
+              <h3 className="text-sm font-medium text-destructive">注销账号</h3>
               <p className="text-sm text-muted-foreground">
                 永久删除你的账号、对话记录和已上传的文件，此操作无法撤销。
               </p>

@@ -20,7 +20,9 @@ export default function SearchQueryPage() {
   const [searchParams] = useSearchParams()
   const q = searchParams.get('q')
   const { isGuest, libraryAvailable } = useAuthCheck()
-  const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+  const [modelSelectorData, setModelSelectorData] = useState<
+    ModelSelectorData | undefined
+  >()
   // chatId 只在首次渲染生成一次(原型是每次 SSR 生成;SPA 复用组件时不能变)
   const [chatId] = useState(() => generateUUID())
 
@@ -36,7 +38,8 @@ export default function SearchQueryPage() {
     // BYOK 配置保存后刷新模型列表
     const handleByokUpdate = () => fetchModels()
     window.addEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
-    return () => window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
+    return () =>
+      window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
   }, [])
 
   if (!q) {

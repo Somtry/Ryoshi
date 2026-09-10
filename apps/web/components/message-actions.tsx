@@ -180,9 +180,7 @@ export function MessageActions({
       captureClient('feedback_recorded', { score, chatId, isGuest })
       setFeedbackScore(score)
       toast.success(
-        score === 1
-          ? '感谢你的好评！'
-          : '感谢反馈，我们会继续改进！'
+        score === 1 ? '感谢你的好评！' : '感谢反馈，我们会继续改进！'
       )
     } catch (error) {
       captureClient('feedback_failed', {

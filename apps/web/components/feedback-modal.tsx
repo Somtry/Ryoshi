@@ -40,23 +40,25 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       return
     }
 
-    startTransition(() => { void (async () => {
-      const result = await submitFeedback({
-        sentiment,
-        message: message.trim(),
-        pageUrl: window.location.href
-      })
+    startTransition(() => {
+      void (async () => {
+        const result = await submitFeedback({
+          sentiment,
+          message: message.trim(),
+          pageUrl: window.location.href
+        })
 
-      if (result.success) {
-        toast.success('感谢你的反馈！')
-        // Reset form and close modal
-        setSentiment(null)
-        setMessage('')
-        onOpenChange(false)
-      } else {
-        toast.error('反馈提交失败，请稍后再试。')
-      }
-    })() })
+        if (result.success) {
+          toast.success('感谢你的反馈！')
+          // Reset form and close modal
+          setSentiment(null)
+          setMessage('')
+          onOpenChange(false)
+        } else {
+          toast.error('反馈提交失败，请稍后再试。')
+        }
+      })()
+    })
   }
 
   const handleCancel = () => {

@@ -111,8 +111,12 @@ export function ApiKeysDialog({ open, onOpenChange }: ApiKeysDialogProps) {
   const [loading, setLoading] = useState(false)
   const [keys, setKeys] = useState<KeySummary[]>([])
   /// 当前展开编辑表单的 provider;null 表示全部收起
-  const [editingProvider, setEditingProvider] = useState<ProviderId | null>(null)
-  const [deletingProvider, setDeletingProvider] = useState<ProviderId | null>(null)
+  const [editingProvider, setEditingProvider] = useState<ProviderId | null>(
+    null
+  )
+  const [deletingProvider, setDeletingProvider] = useState<ProviderId | null>(
+    null
+  )
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -120,9 +124,7 @@ export function ApiKeysDialog({ open, onOpenChange }: ApiKeysDialogProps) {
       const data = await apiFetch<KeyListResponse>('/api/keys')
       setKeys(data.keys)
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : '加载 API 密钥失败'
-      )
+      toast.error(err instanceof Error ? err.message : '加载 API 密钥失败')
     } finally {
       setLoading(false)
     }
@@ -146,9 +148,7 @@ export function ApiKeysDialog({ open, onOpenChange }: ApiKeysDialogProps) {
       window.dispatchEvent(new CustomEvent(BYOK_KEYS_UPDATED_EVENT))
       await refresh()
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : '删除 API 密钥失败'
-      )
+      toast.error(err instanceof Error ? err.message : '删除 API 密钥失败')
     } finally {
       setDeletingProvider(null)
     }
@@ -181,9 +181,7 @@ export function ApiKeysDialog({ open, onOpenChange }: ApiKeysDialogProps) {
                     existing={existing}
                     isEditing={isEditing}
                     isDeleting={deletingProvider === p.id}
-                    onEdit={() =>
-                      setEditingProvider(isEditing ? null : p.id)
-                    }
+                    onEdit={() => setEditingProvider(isEditing ? null : p.id)}
                     onCancel={() => setEditingProvider(null)}
                     onDelete={() => handleDelete(p.id)}
                     onSaved={async () => {
@@ -237,7 +235,9 @@ function ProviderRow({
   const [saving, setSaving] = useState(false)
   const [fetchingModels, setFetchingModels] = useState(false)
   /// 从端点拉取到的模型列表
-  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([])
+  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>(
+    []
+  )
   /// 用户勾选的模型 id 列表
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   /// 手动输入的模型 id(列表拉取之外的补充,如 provider 未列出的新模型)
@@ -441,13 +441,16 @@ function ProviderRow({
         <div className="mt-3 grid gap-3 rounded-md border bg-muted/40 p-3">
           <div className="grid gap-1.5">
             <Label htmlFor={`key-${provider.id}`} className="text-xs">
-              API 密钥 {existing && <span className="text-muted-foreground">（留空则保持不变）</span>}
+              API 密钥{' '}
+              {existing && (
+                <span className="text-muted-foreground">
+                  （留空则保持不变）
+                </span>
+              )}
             </Label>
             <PasswordInput
               id={`key-${provider.id}`}
-              placeholder={
-                existing ? '输入新密钥，留空则不修改' : 'sk-...'
-              }
+              placeholder={existing ? '输入新密钥，留空则不修改' : 'sk-...'}
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
               autoComplete="off"

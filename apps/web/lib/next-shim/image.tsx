@@ -23,12 +23,24 @@ const Image = forwardRef<HTMLImageElement, NextImageProps>(function Image(
 ) {
   // fill 模式:铺满父容器(父需为相对定位),对应 next/image 的 fill 行为
   const fillStyle: React.CSSProperties = fill
-    ? { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
+    ? {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover'
+      }
     : {}
   // priority 是 next 的预加载提示;原生用 loading="eager" 近似
   const loading = priority ? 'eager' : (rest.loading ?? 'lazy')
   return (
-    <img ref={ref} alt={alt} style={{ ...fillStyle, ...style }} loading={loading} {...rest} />
+    <img
+      ref={ref}
+      alt={alt}
+      style={{ ...fillStyle, ...style }}
+      loading={loading}
+      {...rest}
+    />
   )
 })
 

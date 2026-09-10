@@ -25,7 +25,9 @@ export default function SearchPage() {
     | { status: 'not-found' }
     | { status: 'ready'; messages: UIMessage[] }
   >({ status: 'loading' })
-  const [modelSelectorData, setModelSelectorData] = useState<ModelSelectorData | undefined>()
+  const [modelSelectorData, setModelSelectorData] = useState<
+    ModelSelectorData | undefined
+  >()
 
   useEffect(() => {
     const fetchModels = () => {
@@ -39,7 +41,8 @@ export default function SearchPage() {
     // BYOK 配置保存后刷新模型列表
     const handleByokUpdate = () => fetchModels()
     window.addEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
-    return () => window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
+    return () =>
+      window.removeEventListener(BYOK_KEYS_UPDATED_EVENT, handleByokUpdate)
   }, [])
 
   useEffect(() => {

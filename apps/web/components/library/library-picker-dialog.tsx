@@ -296,9 +296,7 @@ export function LibraryPickerDialog({
             <Spinner /> 正在加载知识库
           </div>
         )}
-        {!isLoading && empty && (
-          <CommandEmpty>没有找到相关内容。</CommandEmpty>
-        )}
+        {!isLoading && empty && <CommandEmpty>没有找到相关内容。</CommandEmpty>}
         {!isLoading && !empty && (
           <CommandGroup heading={heading}>
             {notes.map(note => (

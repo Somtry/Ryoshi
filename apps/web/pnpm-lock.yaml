@@ -165,6 +165,9 @@ importers:
       postcss:
         specifier: ^8
         version: 8.5.26
+      prettier:
+        specifier: 3.4.2
+        version: 3.4.2
       tailwindcss:
         specifier: ^4.1.11
         version: 4.3.3
@@ -2279,6 +2282,11 @@ packages:
     peerDependenciesMeta:
       preact-render-to-string:
         optional: true
+
+  prettier@3.4.2:
+    resolution: {integrity: sha512-e9MewbtFo+Fevyuxn/4rrcDAaq0IYxPGLvObpQjiZBMAzB9IGmzlnG9RZy3FFas+eBMu2vA0CszMeduow5dIuQ==}
+    engines: {node: '>=14'}
+    hasBin: true
 
   property-information@7.2.0:
     resolution: {integrity: sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==}
@@ -4989,6 +4997,8 @@ snapshots:
       - preact-render-to-string
 
   preact@10.29.8: {}
+
+  prettier@3.4.2: {}
 
   property-information@7.2.0: {}
 

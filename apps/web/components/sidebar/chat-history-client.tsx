@@ -52,9 +52,11 @@ export function ChatHistoryClient() {
 
   useEffect(() => {
     const handleHistoryUpdate = () => {
-      startTransition(() => { void (async () => {
-        await fetchInitialChats()
-      })() })
+      startTransition(() => {
+        void (async () => {
+          await fetchInitialChats()
+        })()
+      })
     }
     window.addEventListener('chat-history-updated', handleHistoryUpdate)
     return () => {
@@ -68,7 +70,9 @@ export function ChatHistoryClient() {
     setIsLoading(true)
     try {
       const { chats: dbChats, nextOffset: newNextOffset } =
-        await apiFetch<ChatPageResponse>(`/api/chats?offset=${nextOffset}&limit=20`)
+        await apiFetch<ChatPageResponse>(
+          `/api/chats?offset=${nextOffset}&limit=20`
+        )
 
       setChats(prevChats => [...prevChats, ...dbChats])
       setNextOffset(newNextOffset)

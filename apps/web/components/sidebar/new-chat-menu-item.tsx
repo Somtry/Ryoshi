@@ -26,9 +26,15 @@ export function NewChatMenuItem() {
     const handleMessagesChanged = (e: CustomEvent) => {
       setHasMessages(e.detail?.hasMessages ?? false)
     }
-    window.addEventListener('messages-changed', handleMessagesChanged as EventListener)
+    window.addEventListener(
+      'messages-changed',
+      handleMessagesChanged as EventListener
+    )
     return () => {
-      window.removeEventListener('messages-changed', handleMessagesChanged as EventListener)
+      window.removeEventListener(
+        'messages-changed',
+        handleMessagesChanged as EventListener
+      )
     }
   }, [])
 
@@ -48,7 +54,10 @@ export function NewChatMenuItem() {
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton onClick={handleClick} className="flex items-center gap-2">
+      <SidebarMenuButton
+        onClick={handleClick}
+        className="flex items-center gap-2"
+      >
         <Plus className="size-4" />
         <span>新对话</span>
       </SidebarMenuButton>

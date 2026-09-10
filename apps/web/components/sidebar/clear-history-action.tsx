@@ -42,18 +42,20 @@ export function ClearHistoryAction({ empty }: ClearHistoryActionProps) {
   const router = useRouter()
 
   const handleClearAction = useCallback(() => {
-    startTransition(() => { void (async () => {
-      const res = await clearChats()
-      if (res?.success) {
-        toast.success('历史记录已清空')
-        router.push('/')
-      } else if (res?.error) {
-        toast.error(res.error)
-      }
-      setIsAlertOpen(false)
-      setIsMenuOpen(false)
-      window.dispatchEvent(new CustomEvent('chat-history-updated'))
-    })() })
+    startTransition(() => {
+      void (async () => {
+        const res = await clearChats()
+        if (res?.success) {
+          toast.success('历史记录已清空')
+          router.push('/')
+        } else if (res?.error) {
+          toast.error(res.error)
+        }
+        setIsAlertOpen(false)
+        setIsMenuOpen(false)
+        window.dispatchEvent(new CustomEvent('chat-history-updated'))
+      })()
+    })
   }, [startTransition, router])
 
   const handleAlertOpenChange = useCallback(

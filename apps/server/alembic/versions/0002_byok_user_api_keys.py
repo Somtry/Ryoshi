@@ -22,7 +22,6 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """建 user_api_keys 表。幂等:已存在则跳过(0001 用 create_all 会带出新模型)。"""
-    import sqlalchemy as sa
 
     bind = op.get_bind()
     inspector = sa.inspect(bind)

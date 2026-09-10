@@ -14,11 +14,7 @@ export function TodoInvocationContent({ part }: TodoInvocationContentProps) {
   const totalCount = part.output?.totalCount
 
   if (part.state === 'output-error') {
-    return (
-      <TodoListContent
-        errorText={part.errorText || '任务处理失败'}
-      />
-    )
+    return <TodoListContent errorText={part.errorText || '任务处理失败'} />
   }
 
   const message =

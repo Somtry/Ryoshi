@@ -31,7 +31,11 @@ export async function getChatsPage(limit = 20, offset = 0) {
 export async function loadChat(
   chatId: string,
   _userId?: string | null
-): Promise<{ messages: UIMessage[]; title: string; visibility: string } | null> {
+): Promise<{
+  messages: UIMessage[]
+  title: string
+  visibility: string
+} | null> {
   try {
     return await apiFetch(`/api/chats/${chatId}`)
   } catch {

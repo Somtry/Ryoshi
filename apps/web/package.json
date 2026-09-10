@@ -63,6 +63,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "jsdom": "^30.0.1",
     "postcss": "^8",
+    "prettier": "3.4.2",
     "tailwindcss": "^4.1.11",
     "typescript": "^5",
     "vite": "^6.0.0",

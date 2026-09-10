@@ -11,11 +11,10 @@
 import asyncio
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from alembic import context
 
 # 导入模型元数据,让 Alembic 能自动比对出表结构变更(autogenerate 的基础)
 from ryoshi.config import get_settings

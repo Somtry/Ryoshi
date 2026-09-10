@@ -70,21 +70,13 @@ export function ErrorModal({
   const getErrorDescription = () => {
     switch (error.type) {
       case 'rate-limit':
-        return (
-          error.message ||
-          '请求太频繁了，请稍等片刻再试。'
-        )
+        return error.message || '请求太频繁了，请稍等片刻再试。'
       case 'auth':
-        return (
-          error.message ||
-          '登录你的账号或注册新账号，即可使用 Ryoshi。'
-        )
+        return error.message || '登录你的账号或注册新账号，即可使用 Ryoshi。'
       case 'forbidden':
         return '你没有权限访问该资源。'
       default:
-        return (
-          error.message || '发生了意外错误，请重试。'
-        )
+        return error.message || '发生了意外错误，请重试。'
     }
   }
 

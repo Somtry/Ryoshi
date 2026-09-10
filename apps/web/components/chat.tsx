@@ -173,10 +173,13 @@ export function Chat({
             messageId,
             analyticsId: getDistinctId(),
             // 后端据此选择 Quick/Adaptive 智能体(对应原项目的 cookie 记忆)
-            searchMode: getCookie('searchMode') === 'adaptive' ? 'adaptive' : 'quick',
+            searchMode:
+              getCookie('searchMode') === 'adaptive' ? 'adaptive' : 'quick',
             // 模型选择:从 cookie 读取用户选择,后端据此覆盖默认模型
             modelId: (() => {
-              const sel = parseModelSelectionCookie(getCookie(MODEL_SELECTION_COOKIE))
+              const sel = parseModelSelectionCookie(
+                getCookie(MODEL_SELECTION_COOKIE)
+              )
               return sel ? `${sel.providerId}:${sel.modelId}` : undefined
             })(),
             ...(isGuest ? { messages } : {}),
