@@ -43,6 +43,44 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+# 上游错误的"用户可读化"映射:模式 → 友好提示。
+# 设计动机:_supports_vision 是启发式,未知名模型默认放行图片——
+# 误判放行时上游会报"不支持 image 输入"类 400,裸抛给用户是
+# 一串 provider JSON。这里识别常见模式转成可操作的建议。
+_FRIENDLY_ERROR_PATTERNS: list[tuple[str, str]] = [
+    (
+        "does not support image",
+        "当前模型不支持图片输入。请换用支持视觉的模型(如 GPT-4o、Claude、Gemini 系列),或去掉图片后重试。",
+    ),
+    (
+        "image",
+        "图片处理失败:可能是图片过大、格式不受支持,或当前模型不支持图片输入。可尝试换图或换模型。",
+    ),
+    (
+        "invalid_request_error",
+        "请求被模型服务拒绝(参数或内容不合规)。可尝试精简输入后重试。",
+    ),
+    (
+        "rate_limit",
+        "模型服务限流,请稍后重试。",
+    ),
+    (
+        "context_length_exceeded",
+        "对话过长超出模型上下文窗口。请开启新会话,或删减部分内容后重试。",
+    ),
+]
+
+
+def _friendly_error(exc: Exception) -> str:
+    """把上游异常文本转成用户可读的提示;未匹配时原样返回(保留可诊断性)。"""
+    text = str(exc)
+    lowered = text.lower()
+    for pattern, friendly in _FRIENDLY_ERROR_PATTERNS:
+        if pattern in lowered:
+            return f"{friendly}(原始错误: {text[:200]})"
+    return text
+
+
 async def agent_stream_to_frames(
     agent: Any,
     messages: list,
@@ -292,7 +330,7 @@ async def agent_stream_to_frames(
                 yield TextEnd(id=current_text_id or _new_id())
             from ryoshi.chat.frames import Error
 
-            yield Error(errorText=str(exc))
+            yield Error(errorText=_friendly_error(exc))
             # 出错也已尽力收集了部分内容(文本/工具部件),同样交给持久化回调,
             # 用户刷新后能看到"答了一半 + 报错"而不是整轮消失。
             if on_assistant_message is not None and collected_parts:

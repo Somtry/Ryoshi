@@ -6,9 +6,12 @@ import { usePathname, useRouter } from 'next/navigation'
 
 import {
   IconDots as MoreHorizontal,
+  IconDownload as Download,
   IconTrash as Trash2
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
+
+import { getAccessToken } from '@/lib/api-client'
 
 import { deleteChat } from '@/lib/actions/chat'
 import { Chat as DBChat } from '@/lib/db/schema'
@@ -116,6 +119,41 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
     setIsMenuOpen(open)
   }, [])
 
+  /// 导出对话:调后端 /api/chats/{id}/export?format=md 触发下载。
+  /// 用 fetch + blob 而非 window.open:需要带 Authorization 头(登录模式),
+  /// 且能捕获失败给 toast(window.open 失败是静默的)。
+  const handleExportChat = useCallback(async () => {
+    setIsMenuOpen(false)
+    try {
+      const headers: Record<string, string> = {}
+      const token = getAccessToken()
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(`/api/chats/${chat.id}/export?format=md`, {
+        headers
+      })
+      if (!resp.ok) {
+        throw new Error(`导出失败(${resp.status})`)
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // 后端 Content-Disposition 已带文件名(RFC 5987);前端兜底一份
+      const cd = resp.headers.get('content-disposition') || ''
+      const match = cd.match(/filename\*=UTF-8''([^;]+)/)
+      a.download = match
+        ? decodeURIComponent(match[1])
+        : `${chat.title || 'chat'}.md`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('对话已导出')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导出对话失败')
+    }
+  }, [chat.id, chat.title])
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -141,6 +179,16 @@ export function ChatMenuItem({ chat }: ChatMenuItemProps) {
           </SidebarMenuAction>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start">
+          <DropdownMenuItem
+            className="gap-2"
+            onSelect={event => {
+              event.preventDefault()
+              void handleExportChat()
+            }}
+          >
+            <Download size={14} />
+            导出对话
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="gap-2 text-destructive focus:text-destructive"
             onSelect={event => {

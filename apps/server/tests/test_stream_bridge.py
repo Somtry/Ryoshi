@@ -219,3 +219,30 @@ class TestReasoningStream:
         t_idx = next(i for i, p in enumerate(parts) if p["type"] == "text")
         assert parts[r_idx]["text"] == "思考第一段 思考第二段"
         assert r_idx < t_idx
+
+
+class TestFriendlyError:
+    """上游错误 → 用户可读提示(视觉误判放行时的兜底)。"""
+
+    def test_不支持图片错误_转友好提示(self):
+        from ryoshi.chat.stream import _friendly_error
+
+        exc = Exception(
+            "Error code: 400 - {'error': {'message': 'This model does not support image input'}}"
+        )
+        out = _friendly_error(exc)
+        assert "不支持图片输入" in out
+        assert "视觉" in out
+        assert "原始错误" in out  # 保留可诊断性
+
+    def test_上下文超长_转友好提示(self):
+        from ryoshi.chat.stream import _friendly_error
+
+        out = _friendly_error(Exception("context_length_exceeded: 200000 tokens"))
+        assert "上下文" in out
+
+    def test_未知错误_原样返回(self):
+        from ryoshi.chat.stream import _friendly_error
+
+        exc = Exception("some weird failure")
+        assert _friendly_error(exc) == "some weird failure"
