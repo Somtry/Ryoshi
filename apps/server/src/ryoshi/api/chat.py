@@ -13,6 +13,7 @@
 import asyncio
 import logging
 
+import httpx
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -126,10 +127,17 @@ def _extract_user_text(req: ChatRequest) -> str:
         if ptype == "text" and p.get("text"):
             texts.append(p["text"])
         elif ptype == "file" and p.get("url"):
-            # 文件附件:把 URL 和类型注入上下文,让模型知道有附件
-            texts.append(
-                f"[附件: {p.get('filename', 'file')} ({p.get('mediaType', '')})]({p['url']})"
-            )
+            # 文件附件:告知附件存在与文件名。**不写裸 URL**——E2E 验证发现
+            # 模型会把"[附件](url)"当成"消息含 URL"的信号去调 fetch 工具
+            # (prompt 规则:含 URL 先 fetch),反而绕开了多模态视觉通道。
+            # 图片已由 _multimodal_content 以 image block 直接送入视觉通道;
+            # 非图片附件(PDF 等)才提示模型可自行决定是否用 fetch。
+            media = str(p.get("mediaType", ""))
+            name = str(p.get("filename", "file"))
+            if media.startswith("image/"):
+                texts.append(f"[附件: {name}(图片,已直接展示给你,无需 fetch)]")
+            else:
+                texts.append(f"[附件: {name}({media}),如需内容可用 fetch 工具获取]")
         elif ptype == "data-pastedContent" and p.get("data"):
             # 粘贴的大段内容
             content = p["data"].get("content", "") if isinstance(p["data"], dict) else ""
@@ -347,7 +355,56 @@ async def chat(
     from ryoshi.chat.context_window import get_max_allowed_tokens, truncate_messages
     from ryoshi.db.persistence import load_chat
 
-    def _multimodal_content(text: str, parts: list[dict] | None):
+    async def _inline_image_as_data_url(url: str, media_type: str) -> str | None:
+        """把外链图片下载并转成 data: URL(base64 内联)。
+
+        为什么需要:部分模型网关(如 DeepSeek)的服务器**下载不了**
+        公网图片(它们侧的网络受限),直传 URL 会报
+        "Failed to download image"。data: URL 不需要对方下载,
+        彻底绕开该限制。E2E 验证中发现并修复。
+
+        限制:单图 ≤5MB(与上传上限一致);下载走 netguard 校验
+        (内网图片同样拒绝);失败返回 None(调用方保留原 URL,
+        让上游报错——至少错误信息真实)。
+        """
+        try:
+            from ryoshi.netguard import resolve_safe_address
+
+            current = url
+            for _ in range(4):
+                ip, port = await resolve_safe_address(current)
+                async with httpx.AsyncClient(
+                    timeout=15, headers={"User-Agent": "Ryoshi/0.1 (+multimodal)"}
+                ) as client:
+                    resp = await _fetch_bound_for_image(client, current, ip, port)
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    from urllib.parse import urljoin
+
+                    loc = resp.headers.get("location")
+                    if not loc:
+                        break
+                    current = urljoin(current, loc)
+                    continue
+                break
+            if resp.status_code != 200 or len(resp.content) > 5 * 1024 * 1024:
+                return None
+            ctype = resp.headers.get("content-type", "").split(";")[0].strip()
+            if not ctype.startswith("image/"):
+                return None
+            import base64
+
+            b64 = base64.b64encode(resp.content).decode("ascii")
+            return f"data:{ctype};base64,{b64}"
+        except Exception:
+            return None
+
+    def _fetch_bound_for_image(client, url: str, ip: str, port: int):
+        """图片下载复用 fetch 工具的"校验 IP 直连"逻辑(防 rebinding)。"""
+        from ryoshi.tools.fetch import _get_bound
+
+        return _get_bound(client, url, ip, port)
+
+    async def _multimodal_content(text: str, parts: list[dict] | None):
         """把当前用户消息构造成模型 content:有图片附件时输出多模态 block 列表。
 
         LangChain 的 {"type": "image_url", "image_url": {"url": ...}} 是
@@ -364,6 +421,10 @@ async def chat(
         image_url block 会直接 API 报错。按模型名模式判断(BYOK 自定义
         id 无法穷举,宁可保守:未知名默认尝试发送——多数新模型支持,
         失败时错误信息也远比静默丢弃友好)。
+
+        图片 URL 形态选择:自托管存储(R2/MinIO)的 URL 上游网关通常
+        能下载,直传(省 token);其余公网 URL 先由后端探测——探测失败
+        说明上游大概率也下载不了,转 data: URL 内联(见 _inline_image_as_data_url)。
         """
         image_parts = [
             p for p in (parts or [])
@@ -384,10 +445,17 @@ async def chat(
         blocks: list[dict] = []
         if text:
             blocks.append({"type": "text", "text": text})
-        blocks.extend(
-            {"type": "image_url", "image_url": {"url": p["url"]}}
-            for p in image_parts
-        )
+        for p in image_parts:
+            url = str(p["url"])
+            if url.startswith("data:"):
+                # 已内联(粘贴的截图等)直接用
+                blocks.append({"type": "image_url", "image_url": {"url": url}})
+                continue
+            # 后端先探测:失败(上游也大概率拉不了)→ 转 base64 内联
+            inline = await _inline_image_as_data_url(url, str(p.get("mediaType", "image/png")))
+            blocks.append(
+                {"type": "image_url", "image_url": {"url": inline or url}}
+            )
         return blocks
 
     async def build_model_messages() -> list:
@@ -413,7 +481,7 @@ async def chat(
         # 当前用户消息放最后;带图片附件时构造多模态 content
         current_parts = req.message.parts if req.message else None
         history.append(
-            HumanMessage(content=_multimodal_content(user_text, current_parts))
+            HumanMessage(content=await _multimodal_content(user_text, current_parts))
         )
 
         # 上下文窗口截断(对应原项目 truncateMessages)

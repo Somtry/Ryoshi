@@ -65,7 +65,7 @@ class TestMultimodalContent:
 
         return ChatRequest(message=IncomingMessage(parts=parts))
 
-    def test_图片附件_构造多模态block(self):
+    def test_视觉判定与block形态(self):
         from langchain_core.messages import HumanMessage
 
         from ryoshi.api.chat import _supports_vision
@@ -87,17 +87,31 @@ class TestMultimodalContent:
         assert isinstance(msg.content, list)
         assert msg.content[1]["image_url"]["url"] == "https://s3/a.png"
 
-    def test_extract_user_text_保留附件文本行(self):
+    def test_图片附件_不露出URL_避免误导模型fetch(self):
+        """E2E 发现:附件文本行带裸 URL 会触发模型 fetch 而绕开视觉通道。"""
+        from ryoshi.api.chat import _extract_user_text
+
         req = self._build_req([
             {"type": "text", "text": "帮我看看这张图"},
             {"type": "file", "url": "https://s3/a.png", "filename": "截图.png",
              "mediaType": "image/png"},
         ])
-        from ryoshi.api.chat import _extract_user_text
-
         text = _extract_user_text(req)
         assert "帮我看看这张图" in text
-        assert "https://s3/a.png" in text  # 附件以文本行形式告知模型
+        assert "截图.png" in text
+        assert "https://s3/a.png" not in text  # 不再露出裸 URL
+        assert "无需 fetch" in text
+
+    def test_非图片附件_提示可用fetch(self):
+        from ryoshi.api.chat import _extract_user_text
+
+        req = self._build_req([
+            {"type": "file", "url": "https://s3/doc.pdf", "filename": "论文.pdf",
+             "mediaType": "application/pdf"},
+        ])
+        text = _extract_user_text(req)
+        assert "论文.pdf" in text
+        assert "fetch" in text
 
     def test_无图片附件_行为不变(self):
         req = self._build_req([{"type": "text", "text": "纯文本问题"}])
