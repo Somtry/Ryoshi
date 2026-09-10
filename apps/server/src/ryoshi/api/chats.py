@@ -118,8 +118,17 @@ async def export_chat(
     if chat is None:
         raise HTTPException(status_code=404, detail="Chat not found")
 
-    # 文件名里的标题:去路径分隔符防注入,限长
+    # 文件名里的标题:去路径分隔符防注入,限长。
+    # HTTP 头只允许 latin-1:中文标题必须走 RFC 5987 的 filename* 编码
+    # (filename= 给老浏览器兜底,仅 ASCII 安全字符)。
+    import urllib.parse
+
     safe_title = "".join(c for c in chat["title"] if c not in "/\\:*?\"<>|")[:50] or "chat"
+    ascii_fallback = safe_title.encode("ascii", "ignore").decode() or "chat"
+    disposition = (
+        f"attachment; filename=\"{ascii_fallback}.{format}\"; "
+        f"filename*=UTF-8''{urllib.parse.quote(f'{safe_title}.{format}')}"
+    )
 
     if format == "json":
         import json
@@ -136,9 +145,7 @@ async def export_chat(
         return Response(
             content=payload,
             media_type="application/json",
-            headers={
-                "Content-Disposition": f'attachment; filename="{safe_title}.json"',
-            },
+            headers={"Content-Disposition": disposition},
         )
 
     # ---- Markdown ----
@@ -160,7 +167,5 @@ async def export_chat(
     return Response(
         content="\n".join(lines),
         media_type="text/markdown; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="{safe_title}.md"',
-        },
+        headers={"Content-Disposition": disposition},
     )

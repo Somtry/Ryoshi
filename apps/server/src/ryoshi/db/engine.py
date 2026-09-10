@@ -74,13 +74,17 @@ def init_db() -> AsyncEngine:
     settings = get_settings()
     url, connect_args = normalize_database_url(settings.database_url)
 
+    # 连接池参数仅对支持多连接的方言有意义:SQLite(aiosqlite,含内存库)
+    # 走 StaticPool 单连接,不接受 pool_size/max_overflow(测试与脚本场景)。
+    pool_kwargs: dict = {}
+    if not url.startswith("sqlite"):
+        pool_kwargs = {"pool_pre_ping": True, "pool_size": 10, "max_overflow": 20}
+
     _engine = create_async_engine(
         url,
         echo=False,  # 调试时可改 True 打印 SQL
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
         connect_args=connect_args,
+        **pool_kwargs,
     )
     _session_factory = async_sessionmaker(
         bind=_engine,
