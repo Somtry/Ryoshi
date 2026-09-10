@@ -55,7 +55,9 @@ jobs:
       - name: 安装 Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # vitest 3 / vite 6 要求 node >= 22.12(Node 20 会导致
+          # vitest 启动即失败——首轮三轮 CI 红的原因)
+          node-version: 24
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
